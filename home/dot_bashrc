@@ -134,8 +134,18 @@ fi
 
 # mise-en-place
 eval "$(~/.local/bin/mise activate bash)"
+eval "$(mise completion bash)"
 
 # chezmoi
 if command -v chezmoi 2>&1 >/dev/null; then
 	eval "$(chezmoi completion bash)"
 fi
+
+# pyenv
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
+
+# direnv
+eval "$(direnv hook bash)"

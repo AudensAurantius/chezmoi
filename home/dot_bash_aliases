@@ -20,3 +20,8 @@ alias md="mkdir -p"
 if [ -x /usr/bin/batcat ]; then
 	alias bat=/usr/bin/batcat
 fi
+
+if ! command -v ipython >/dev/null 2>&1; then
+	alias ipython=ipython3
+fi
+alias fd=fdfind
