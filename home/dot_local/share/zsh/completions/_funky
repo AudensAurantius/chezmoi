@@ -1,0 +1,34 @@
+#compdef funky
+
+typeset -A opt_args
+local -a funks=( ${(f)"$(funky --color n \
+  | grep -v '^\s\+#!' \
+  | sed -n '/^[a-zA-Z_-}]/,/^\s\+[^#]/p' \
+  | grep -v '^\s\+[^#]' \
+  | grep -v '^\s*$' \
+  | sed 's/^\s*//' \
+  | awk -vRS='}\n' -vFS=' {\n# ' -vOFS=':' '{$1=$1; print;}' \
+  | grep -v '^$' \
+  | sed 's/^\([a-zA-Z_-]\+\)()\( {\)\?/\1/' \
+  | grep -v '^#')"}
+)
+
+local -a arguments=(
+  '*:funk name:(($funks))'
+  + '(info)'
+  '(*)'{-h,--help}'[Show this help message and exit]'
+  {-d,--debug}'[Enable debug mode]'
+  '(*)--version[Show version number and exit]'
+  + '(setup)'
+  '(*)--setup-shell[Ensure your shell is configured correctly]:shell:(bash zsh)'
+  '(*)--init[Initialize shell environment (should be run from .*rc)]:shell:(bash zsh)'
+  + format-output
+  {-v,--verbose}'[Enable verbose output]'
+  '(*)--color[Colorize funk definitions]:y/n:(y n)'
+  + '(action)'
+  '(* -r -R)-a[Add a new funk]:name:()'   # TODO: Add _guard in action here
+  '(* -a -R)-r[Remove existing funk (remove all in pwd if none given)]:funk:(($funks))'
+  '(* -a -r)-R[Rename existing funk]:existing funk:(($funks)):new funk name:'
+)
+
+_arguments -s -S $arguments

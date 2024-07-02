@@ -1,0 +1,14 @@
+#!/bin/zsh -f
+# Prints minimal JSON representation of the directory tree under PWD
+
+dirtree() {
+    tree -d -J ${1:-`pwd`} |
+        jq '
+            .[0] | walk(
+                if type=="object" and has("name")
+                then {(.name):(.contents)}
+                else . end
+            )'
+}
+
+dirtree $@

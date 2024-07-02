@@ -1,0 +1,3 @@
+set synctex true
+set synctex-editor-command 'nvr --remote +"%line" "%file"'
+set selection-clipboard clipboard

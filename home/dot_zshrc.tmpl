@@ -108,6 +108,18 @@ zinit light-mode for \
 
 alias bat=batcat
 
+zinit add-fpath {{ joinPath .filesystem.appData "zsh" "functions" | quote }}
+
+zinit wait lucid \
+  id-as"local-snippets" nocompile \
+  multisrc{{ joinPath .filesystem.appData "zsh" "snippets" "*.zsh" | quote }} \
+  atinit"autoload -Uz {{ joinPath .filesystem.appData "zsh" "functions" "*(:t)" }}" \
+  atpull'zinit creinstall -q {{ joinPath .filesystem.appData "zsh" "completions" }}' \
+  run-atpull \
+for zdharma-continuum/null
+
+zinit snippet {{ joinPath .filesystem.appData "zsh" "local.plugin.zsh" | quote }}
+
 # - - - - - - - - - - - - - - - - - - - -
 # End Profiling Script
 # - - - - - - - - - - - - - - - - - - - -

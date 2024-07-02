@@ -1,0 +1,10 @@
+#!/bin/zsh -f
+# gi
+
+local gitignore=$(git rev-parse --show-toplevel)/.gitignore 2>/dev/null
+if ((?)); then
+  print -u2 "Not a git repository"
+  return 1
+fi
+print -l $@ >>$gitignore
+git add $gitignore && git commit $gitignore -m "Ignore: ${(j:, :)@}"

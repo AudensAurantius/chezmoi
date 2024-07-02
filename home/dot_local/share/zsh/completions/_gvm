@@ -1,0 +1,11 @@
+#compdef _gvm gvm
+
+local -a cmds=(${(f)"$(
+    gvm help \
+        | sed -n '/^Commands:/,/^$/p' \
+        | sed -e '1d' -e '/^$/d' -e 's/^\s*//' \
+        | awk -F '\\s+-\\s+' -vOFS=':' '{$1=$1; print;}'
+)"})
+
+_arguments "*:"${^cmds}
+

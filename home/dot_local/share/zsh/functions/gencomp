@@ -1,0 +1,22 @@
+#!/bin/zsh -f
+# Simple function to add command to the list of commands for which _gnu_generic will be used to generate completions
+
+local compfile="${ZDOTDIR}/completion/_generic"
+local -a cmds=()
+
+if [[ ! -e "$compfile" ]]; then
+        print -u2 "Error: ${me}: Completion file '${compfile}' not found"
+        return -1
+else
+        for name in $@; do
+                if grep -q "$name" "$compfile"; then
+                        print -u2 "Command '${name}' is already completed using _gnu_generic"
+                else
+                        hash -v "$name" >/dev/null 2>&1 &&
+                                cmds+=("$name") ||
+                                print -u2 "Command '${name}' not found"
+                fi
+        done
+        ((#cmds)) && sed -i "1s/$/ ${cmds}/" "$compfile" &&
+                print -u2 "Commands added to generic complist: ${(j:, :)cmds}"
+fi

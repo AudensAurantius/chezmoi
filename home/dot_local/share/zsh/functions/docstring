@@ -1,0 +1,13 @@
+#!/bin/zsh -f
+# Prints usage information for private autoloaded functions
+# Usage information is taken from (trimmed) comments placed at the top of
+# autoloaded function definition files
+
+local zfuncdir=~/.zshrc.d/functions
+file=$zfuncdir/$1
+if [[ -r $file ]]; then
+    sed -n '2,/^$/p' $file | sed 's/^#//'
+else
+    echo "File '$file' not found" >&2
+fi
+return $?

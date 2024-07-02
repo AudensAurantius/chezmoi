@@ -1,0 +1,9 @@
+#!/bin/zsh -f
+# REPL for Graphviz (dot)
+
+local input="$(mktemp --suffix=dotz-input.gv)" output="$(mktemp --suffix=dotz-output.png)"
+trap "rm -f '$input' '$output'" EXIT SIGINT
+
+dot >"$input" &&
+        dot -o "$output" "$input" &&
+        kitty +kitten icat "$output"

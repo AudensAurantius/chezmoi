@@ -1,0 +1,22 @@
+#!/bin/zsh -f
+# Browse files in target directory using FZF
+# If a file is passed instead of a directory, the search path will fall back to
+#       - the repository root, if the file is a part of a git repo
+#       - the file's parent directory, otherwise
+# If no argument is passed, search from $PWD
+# If more than one argument is passed, then the remainder (i.e., ${@[2,-1]}) are passed to xargs as a command to execute on the selected file(s)
+
+local dest=$1 && shift 2>/dev/null
+local gitdir
+if [[ -z $dest ]]; then
+        dest="$PWD"
+elif [[ -f $dest ]]; then
+        gitdir="$(cd "${dest:h}" && git rev-parse --show-toplevel 2>/dev/null)" &&
+                dest="$gitdir" ||
+                dest="${dest:h}"
+elif ! [[ -e $dest ]]; then
+        dest="$(autojump -- "$dest")"
+fi
+find "$dest" -name ".git" -prune -o -type f -print \
+        | fzf --preview="pistol {}" -m \
+        | if (( $# )); then xargs $@; else cat -; fi

@@ -1,0 +1,4 @@
+#!/bin/zsh -f
+# Useful if gpg-agent starts to hang
+
+gpgconf --kill gpg-agent

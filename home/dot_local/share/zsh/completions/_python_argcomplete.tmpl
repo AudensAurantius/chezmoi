@@ -1,0 +1,5 @@
+{{ if lookPath "pipx" -}}
+{{ if lookPath "register-python-argcomplete" -}}
+{{ output "register-python-argcomplete" "pipx" "yq" }}
+{{- end }}
+{{- end }}

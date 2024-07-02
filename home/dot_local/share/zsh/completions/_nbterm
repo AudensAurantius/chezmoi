@@ -1,0 +1,7 @@
+#compdef nbterm
+
+_nbterm_completion() {
+  eval $(env _TYPER_COMPLETE_ARGS="${words[1,$CURRENT]}" _NBTERM_COMPLETE=complete_zsh nbterm)
+}
+
+compdef _nbterm_completion nbterm

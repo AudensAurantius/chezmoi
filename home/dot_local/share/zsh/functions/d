@@ -1,0 +1,5 @@
+#!/bin/zsh -f
+# d: use FZF to browse dirstack and cd into selected dir
+
+print -l $dirstack | fzf --preview="lsd -la --color always {}" | read d && cd $d
+

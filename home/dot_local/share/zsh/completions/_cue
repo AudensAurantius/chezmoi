@@ -1,0 +1,444 @@
+#compdef _cue cue
+
+
+function _cue {
+  local -a commands
+
+  _arguments -C \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]' \
+    "1: :->cmnds" \
+    "*::arg:->args"
+
+  case $state in
+  cmnds)
+    commands=(
+      "cmd:run a user-defined shell command"
+      "commands:user-defined commands"
+      "completion:Generate completion script"
+      "def:print consolidated definitions"
+      "eval:evaluate and print a configuration"
+      "export:output data in a standard format"
+      "filetypes:supported file types and qualifiers"
+      "fix:rewrite packages to latest standards"
+      "flags:common flags for composing packages"
+      "fmt:formats CUE configuration files"
+      "get:add dependencies to the current module"
+      "help:Help about any command"
+      "import:convert other formats to CUE files"
+      "injection:inject files or values into specific fields for a build"
+      "inputs:package list, patterns, and files"
+      "mod:module maintenance"
+      "trim:remove superfluous fields"
+      "version:print CUE version"
+      "vet:validate data"
+    )
+    _describe "command" commands
+    ;;
+  esac
+
+  case "$words[1]" in
+  cmd)
+    _cue_cmd
+    ;;
+  commands)
+    _cue_commands
+    ;;
+  completion)
+    _cue_completion
+    ;;
+  def)
+    _cue_def
+    ;;
+  eval)
+    _cue_eval
+    ;;
+  export)
+    _cue_export
+    ;;
+  filetypes)
+    _cue_filetypes
+    ;;
+  fix)
+    _cue_fix
+    ;;
+  flags)
+    _cue_flags
+    ;;
+  fmt)
+    _cue_fmt
+    ;;
+  get)
+    _cue_get
+    ;;
+  help)
+    _cue_help
+    ;;
+  import)
+    _cue_import
+    ;;
+  injection)
+    _cue_injection
+    ;;
+  inputs)
+    _cue_inputs
+    ;;
+  mod)
+    _cue_mod
+    ;;
+  trim)
+    _cue_trim
+    ;;
+  version)
+    _cue_version
+    ;;
+  vet)
+    _cue_vet
+    ;;
+  esac
+}
+
+function _cue_cmd {
+  _arguments \
+    '(*-t *--inject)'{\*-t,\*--inject}'[set the value of a tagged field]:' \
+    '(-T --inject-vars)'{-T,--inject-vars}'[inject system variables in tags]' \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_commands {
+  _arguments \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_completion {
+  _arguments \
+    '(-h --help)'{-h,--help}'[help for completion]' \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]' \
+    '1: :("bash" "zsh" "fish" "powershell")'
+}
+
+function _cue_def {
+  _arguments \
+    '(*-e *--expression)'{\*-e,\*--expression}'[evaluate this expression only]:' \
+    '(-f --force)'{-f,--force}'[force overwriting existing files]' \
+    '(*-t *--inject)'{\*-t,\*--inject}'[set the value of a tagged field]:' \
+    '(-T --inject-vars)'{-T,--inject-vars}'[inject system variables in tags]' \
+    '--list[concatenate multiple objects into a list]' \
+    '--merge[merge non-CUE files]' \
+    '(-n --name)'{-n,--name}'[glob filter for non-CUE file names in directories]:' \
+    '--out[output format (run '\''cue filetypes'\'' for more info)]:' \
+    '(-o --outfile)'{-o,--outfile}'[filename or - for stdout with optional file prefix (run '\''cue filetypes'\'' for more info)]:' \
+    '(-p --package)'{-p,--package}'[package name for non-CUE files]:' \
+    '(*-l *--path)'{\*-l,\*--path}'[CUE expression for single path component]:' \
+    '--proto_enum[mode for rendering enums (int|json)]:' \
+    '(*-I *--proto_path)'{\*-I,\*--proto_path}'[paths in which to search for imports]:' \
+    '(-d --schema)'{-d,--schema}'[expression to select schema for evaluating values in non-CUE files]:' \
+    '(-A --show-attributes)'{-A,--show-attributes}'[display field attributes]' \
+    '--with-context[import as object with contextual data]' \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_eval {
+  _arguments \
+    '(-a --all)'{-a,--all}'[show optional and hidden fields]' \
+    '(-c --concrete)'{-c,--concrete}'[require the evaluation to be concrete]' \
+    '(*-e *--expression)'{\*-e,\*--expression}'[evaluate this expression only]:' \
+    '(-f --force)'{-f,--force}'[force overwriting existing files]' \
+    '(*-t *--inject)'{\*-t,\*--inject}'[set the value of a tagged field]:' \
+    '(-T --inject-vars)'{-T,--inject-vars}'[inject system variables in tags]' \
+    '--list[concatenate multiple objects into a list]' \
+    '--merge[merge non-CUE files]' \
+    '(-n --name)'{-n,--name}'[glob filter for non-CUE file names in directories]:' \
+    '--out[output format (run '\''cue filetypes'\'' for more info)]:' \
+    '(-o --outfile)'{-o,--outfile}'[filename or - for stdout with optional file prefix (run '\''cue filetypes'\'' for more info)]:' \
+    '(-p --package)'{-p,--package}'[package name for non-CUE files]:' \
+    '(*-l *--path)'{\*-l,\*--path}'[CUE expression for single path component]:' \
+    '--proto_enum[mode for rendering enums (int|json)]:' \
+    '(*-I *--proto_path)'{\*-I,\*--proto_path}'[paths in which to search for imports]:' \
+    '(-d --schema)'{-d,--schema}'[expression to select schema for evaluating values in non-CUE files]:' \
+    '(-A --show-attributes)'{-A,--show-attributes}'[display field attributes]' \
+    '(-H --show-hidden)'{-H,--show-hidden}'[display hidden fields]' \
+    '(-O --show-optional)'{-O,--show-optional}'[display optional fields]' \
+    '--with-context[import as object with contextual data]' \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_export {
+  _arguments \
+    '--escape[use HTML escaping]' \
+    '(*-e *--expression)'{\*-e,\*--expression}'[export this expression only]:' \
+    '(-f --force)'{-f,--force}'[force overwriting existing files]' \
+    '(*-t *--inject)'{\*-t,\*--inject}'[set the value of a tagged field]:' \
+    '(-T --inject-vars)'{-T,--inject-vars}'[inject system variables in tags]' \
+    '--list[concatenate multiple objects into a list]' \
+    '--merge[merge non-CUE files]' \
+    '(-n --name)'{-n,--name}'[glob filter for non-CUE file names in directories]:' \
+    '--out[output format (run '\''cue filetypes'\'' for more info)]:' \
+    '(-o --outfile)'{-o,--outfile}'[filename or - for stdout with optional file prefix (run '\''cue filetypes'\'' for more info)]:' \
+    '(-p --package)'{-p,--package}'[package name for non-CUE files]:' \
+    '(*-l *--path)'{\*-l,\*--path}'[CUE expression for single path component]:' \
+    '--proto_enum[mode for rendering enums (int|json)]:' \
+    '(*-I *--proto_path)'{\*-I,\*--proto_path}'[paths in which to search for imports]:' \
+    '(-d --schema)'{-d,--schema}'[expression to select schema for evaluating values in non-CUE files]:' \
+    '--with-context[import as object with contextual data]' \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_filetypes {
+  _arguments \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_fix {
+  _arguments \
+    '(-f --force)'{-f,--force}'[rewrite even when there are errors]' \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_flags {
+  _arguments \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_fmt {
+  _arguments \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+
+function _cue_get {
+  local -a commands
+
+  _arguments -C \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]' \
+    "1: :->cmnds" \
+    "*::arg:->args"
+
+  case $state in
+  cmnds)
+    commands=(
+      "go:add Go dependencies to the current module"
+    )
+    _describe "command" commands
+    ;;
+  esac
+
+  case "$words[1]" in
+  go)
+    _cue_get_go
+    ;;
+  esac
+}
+
+function _cue_get_go {
+  _arguments \
+    '(-e --exclude)'{-e,--exclude}'[comma-separated list of regexps of entries]:' \
+    '--local[generates files in the main module locally]' \
+    '(-p --package)'{-p,--package}'[package name for generated CUE files]:' \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_help {
+  _arguments \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_import {
+  _arguments \
+    '--dryrun[only run simulation]' \
+    '*--ext[match files with these extensions]:' \
+    '--files[split multiple entries into different files]' \
+    '(-f --force)'{-f,--force}'[force overwriting existing files]' \
+    '--list[concatenate multiple objects into a list]' \
+    '--merge[merge non-CUE files]' \
+    '(-n --name)'{-n,--name}'[glob filter for non-CUE file names in directories]:' \
+    '(-o --outfile)'{-o,--outfile}'[filename or - for stdout with optional file prefix (run '\''cue filetypes'\'' for more info)]:' \
+    '(-p --package)'{-p,--package}'[package name for non-CUE files]:' \
+    '(*-l *--path)'{\*-l,\*--path}'[CUE expression for single path component]:' \
+    '--proto_enum[mode for rendering enums (int|json)]:' \
+    '(*-I *--proto_path)'{\*-I,\*--proto_path}'[paths in which to search for imports]:' \
+    '(-R --recursive)'{-R,--recursive}'[recursively parse string values]' \
+    '(-d --schema)'{-d,--schema}'[expression to select schema for evaluating values in non-CUE files]:' \
+    '--with-context[import as object with contextual data]' \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_injection {
+  _arguments \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_inputs {
+  _arguments \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+
+function _cue_mod {
+  local -a commands
+
+  _arguments -C \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]' \
+    "1: :->cmnds" \
+    "*::arg:->args"
+
+  case $state in
+  cmnds)
+    commands=(
+      "init:initialize new module in current directory"
+    )
+    _describe "command" commands
+    ;;
+  esac
+
+  case "$words[1]" in
+  init)
+    _cue_mod_init
+    ;;
+  esac
+}
+
+function _cue_mod_init {
+  _arguments \
+    '(-f --force)'{-f,--force}'[force moving old-style cue.mod file]' \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_trim {
+  _arguments \
+    '(-f --force)'{-f,--force}'[force overwriting existing files]' \
+    '(-o --outfile)'{-o,--outfile}'[filename or - for stdout with optional file prefix (run '\''cue filetypes'\'' for more info)]:' \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_version {
+  _arguments \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+
+function _cue_vet {
+  _arguments \
+    '(-c --concrete)'{-c,--concrete}'[require the evaluation to be concrete]' \
+    '(*-t *--inject)'{\*-t,\*--inject}'[set the value of a tagged field]:' \
+    '(-T --inject-vars)'{-T,--inject-vars}'[inject system variables in tags]' \
+    '--list[concatenate multiple objects into a list]' \
+    '--merge[merge non-CUE files]' \
+    '(-n --name)'{-n,--name}'[glob filter for non-CUE file names in directories]:' \
+    '(-p --package)'{-p,--package}'[package name for non-CUE files]:' \
+    '(*-l *--path)'{\*-l,\*--path}'[CUE expression for single path component]:' \
+    '--proto_enum[mode for rendering enums (int|json)]:' \
+    '(*-I *--proto_path)'{\*-I,\*--proto_path}'[paths in which to search for imports]:' \
+    '(-d --schema)'{-d,--schema}'[expression to select schema for evaluating values in non-CUE files]:' \
+    '--with-context[import as object with contextual data]' \
+    '(-E --all-errors)'{-E,--all-errors}'[print all available errors]' \
+    '(-i --ignore)'{-i,--ignore}'[proceed in the presence of errors]' \
+    '(-s --simplify)'{-s,--simplify}'[simplify output]' \
+    '--strict[report errors for lossy mappings]' \
+    '--trace[trace computation]' \
+    '(-v --verbose)'{-v,--verbose}'[print information about progress]'
+}
+

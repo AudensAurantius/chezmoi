@@ -1,0 +1,38 @@
+#compdef variety
+
+# zsh completions for 'variety'
+# automatically generated with http://github.com/RobSis/zsh-completion-generator
+local arguments
+
+arguments=(
+  '--version[show programs version number and exit]'
+  {-h,--help}'[show this help message and exit]'
+  '--profile[profile name or full path to the configuration folder]'
+  {-v,--verbose}'[show logging messages (-vv to -vvvvv will profile]'
+  {-q,--quit}'[make the running instance quit]'
+  {--get,--get-wallpaper,--current,--show-current}'[print the current wallpaper location. Used only when]'
+  {--set,--set-wallpaper}'[set the given file as wallpaper, absolute path]'
+  {-n,--next}'[show Next wallpaper]'
+  {-p,--previous}'[show Previous wallpaper]'
+  '--fast-forward[show Next wallpaper, skipping the forward history]'
+  {-t,--trash}'[move current wallpaper to Trash. Used only when the]'
+  {-f,--favorite}'[copy current wallpaper to Favorites. Used only when]'
+  '--move-to-favorites[move current wallpaper to Favorites. Used only when]'
+  '--pause[pause on current image]'
+  '--resume[resume regular image changes]'
+  '--toggle-pause[toggle Pause/Resume state]'
+  '--toggle-no-effects[toggle "Show Without Effects" for current image]'
+  '--quotes-next[show Next quote]'
+  '--quotes-previous[show Previous quote]'
+  '--quotes-fast-forward[show Next quote, skipping the forward history]'
+  '--quotes-toggle-pause[toggle Quotes Pause/Resume state]'
+  '--quotes-save-favorite[save the current quote to Favorites]'
+  '--history[toggle History display]'
+  '--downloads[toggle Recent Downloads display]'
+  {--preferences,--show-preferences}'[show Preferences dialog]'
+  {--selector,--show-selector}'[show manual wallpaper selector - the thumbnail bar]'
+  '--set-option[sets and applies an option. The option names are the]'
+  '*:filename:_files'
+)
+
+_arguments -s $arguments

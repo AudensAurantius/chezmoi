@@ -1,0 +1,10 @@
+#!/bin/zsh -f
+
+case $TERM in
+  xterm-kitty)
+    exec kitty +kitten hyperlinked_grep $@
+    ;;
+  *)
+    rg $@
+    ;;
+esac

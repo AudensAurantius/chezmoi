@@ -1,0 +1,19 @@
+#!/bin/zsh -f
+# project
+
+local name=$1 project_template=~/Source/.project-template/
+local dest=~/Source/$name
+
+if [[ -e $dest ]]; then
+  print -u2 "Unable to create project ${name}: ${dest} already exists"
+  return 1
+fi
+mkdir -p $(dirname $dest)
+
+cp -r $project_template $dest
+cd $dest
+git init . &&
+  print -l ".envrc" ".ipython" ".direnv" ".jukit" >>./.git/info/exclude &&
+  git add .gitignore && git commit -m "Ignore swapfiles and __pycache__" &&
+  git add requirements.txt && git commit -m "Add standard dependencies"
+direnv allow . && pip install --upgrade pip && pip install -r requirements.txt

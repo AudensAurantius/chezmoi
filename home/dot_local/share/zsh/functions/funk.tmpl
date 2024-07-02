@@ -1,0 +1,28 @@
+#!/bin/zsh -f
+# Edit or create a shell function in Chezmoi functions dir
+
+function chezmoi_commit() {
+    pushd $(chezmoi source-path)
+    git add $@
+    git commit $@ -m "Updated zsh autoload functions: $@"
+    popd
+}
+
+pushd $(chezmoi source-path)
+git diff --quiet && git diff --cached --quiet
+local -i git_status=$?
+
+local funks={{joinPath .chezmoi.sourceDir "dot_local" "share" "zsh" "functions" | quote}}
+if [[ ! -e ${funks}/${1} ]]; then
+    cat <<-FUNK >${funks}/${1}
+			#!/bin/zsh -f
+			# $1
+			
+			FUNK
+fi
+
+${EDITOR:-vim} ${funks}/${1}
+print -u2 "Committing saved changes to ${funks}/${1}..."
+chezmoi_commit ${funks}/${1}
+chezmoi apply && autoload -Uz $1 || print -u2 "Unable to apply changes"
+popd

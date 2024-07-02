@@ -1,0 +1,44 @@
+#!/bin/zsh -f
+# TODO: Use `fc-pattern -d` to determine best image size
+
+zmodload zsh/zutil
+local opts=(
+        [-gravity]=center
+        [-background-color]=transparent
+        [-preview-color]='#ffffff'
+        [-image-size]=532x365
+        [-font-size]=38
+        [-output-file]=
+        [-preview-text]="ABCDEFGHIJKLM\nNOPQRSTUVWXYZ\nabcdefghijklm\nnopqrstuvwxyz\n1234567890\n!@$\%()\{\}[]"
+)
+zparseopts -D -E -K -A opts -- \
+        -gravity: g:=-gravity \
+        -background-color: C:=-background-color \
+        -preview-color: c:=-preview-color \
+        -image-size: S:=-image-size \
+        -font-size: s:=-font-size \
+        -preview-text: p:=-preview-text \
+        -output-file: o:=-output-file \
+        -force-overwrite f=-force-overwrite
+
+[[ $1 == "--" ]] && shift
+local FONT=$*
+
+if [[ -e ${opts[-output-file]} ]] && (( ${+flags[-force-overwrite]} )); then
+        print -u2 "File '${opts[-output-file]}' already exists.  Pass -f to force overwrite"
+elif [[ -z ${opts[-output-file]} ]]; then
+        opts[-output-file]=$(mktemp --suffix=.png)
+fi
+
+# Generate preview with ImageMagick
+convert -size ${opts[-image-size]} \
+	xc:none \
+	-background ${opts[-background-color]} \
+	-gravity ${opts[-gravity]} \
+	-pointsize ${opts[font-size]} \
+	-font $FONT \
+	-fill ${opts[-preview-color]} \
+	-annotate +0+0 ${opts[-preview-text]} \
+        -flatten ${opts[-output-file]}
+
+print $OUTPUT

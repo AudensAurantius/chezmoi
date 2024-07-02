@@ -1,0 +1,20 @@
+#!/bin/zsh -f
+# Wrapper script to generate and cache preview images (thumbnails, etc.) for certain types of files
+# Returns 0 and echoes the location of a suitable preview file if successful
+# Returns 1 if not
+
+local -r logfile=~/.cache/logs/${0}.log
+setopt MULTIOS          # For logging
+exec &>&1 &>$logfile
+
+local -r cachedir=${CACHEDIR:-~/.cache/previews}
+local -a default_sizes=(
+        font=532x365
+        pdf=
+)
+
+case $type in
+        music)
+                ffmpeg -i
+                ;;
+        font)

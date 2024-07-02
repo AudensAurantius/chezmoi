@@ -1,0 +1,10 @@
+#!/bin/zsh -f
+# Run a git command on a bare repository
+# Params:
+#   $1          gitdir (i.e., repository root)
+#               mandatory
+#   $2          worktree root
+#               defaults to $HOME
+#   ${@[3:]}    git command to run
+
+git --git-dir="$1" --work-tree="${2:-$HOME}" $@
