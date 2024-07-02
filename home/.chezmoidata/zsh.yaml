@@ -1,0 +1,7 @@
+zsh:
+  theme: powerlevel10k
+  use_old_annexes: false
+  use_marker: false
+  histdb:
+    use: false
+    strategy: "top"

@@ -1,0 +1,121 @@
+{{- $zsh_tmpls := joinPath .chezmoi.sourceDir ".chezmoitemplates" "zsh" -}}
+{{- $data := . -}}
+#!usr/bin/env zsh
+
+# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
+# Initialization code that may require console input (password prompts, [y/n]
+# confirmations, etc.) must go above this block; everything else may go below.
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+export ZINIT_HOME={{ joinPath .filesystem.appData "zinit" "zinit.git" | squote }}
+export ZCOMP_CACHE={{ joinPath .filesystem.cacheDir "zcomp" | squote }}
+
+source "${ZINIT_HOME}/zinit.zsh"
+
+# - - - - - - - - - - - - - - - - - - - -
+# Profiling Tools
+# To turn on profiling, run 'touch ~/.zprofile' and restart the shell
+# To turn off profiling, run 'rm ~/.zprofile' and restart the shell
+# - - - - - - - - - - - - - - - - - - - -
+PROFILE_STARTUP=false
+if [[ -e "${HOME}/.zprofile" ]]; then
+  PROFILE_STARTUP=true
+  zmodload zsh/zprof
+  # http://zsh.sourceforge.net/Doc/Release/Prompt-Expansion.html
+  PS4=$'%D{%M%S%.} %N:%i> '
+  exec 3>&2 2>${HOME}/.cache/logs/zinit.$$.log
+  setopt xtrace prompt_subst
+fi
+
+# - - - - - - - - - - - - - - - - - - - -
+# Zsh Core Configuration
+# - - - - - - - - - - - - - - - - - - - -
+
+# Load The Prompt System And Completion System And Initilize Them.
+autoload -Uz compinit promptinit
+
+# Load And Initialize The Completion System Ignoring Insecure Directories With A
+# Cache Time Of 20 Hours, So It Should Almost Always Regenerate The First Time A
+# Shell Is Opened Each Day.
+# See: https://gist.github.com/ctechols/ca1035271ad134841284
+_comp_files=("${ZCOMP_CACHE}/.zcompdump(Nm-20)")
+if (( $#_comp_files )); then
+    compinit -i -C
+else
+    compinit -i
+fi
+unset _comp_files
+promptinit
+setopt prompt_subst
+
+autoload -U colors && colors    # Load Colors.
+
+{{- if (hasKey .zsh "theme") }}
+# - - - - - - - - - - - - - - - - - - - -
+# Theme
+# - - - - - - - - - - - - - - - - - - - -
+{{ includeTemplate (joinPath "zsh/themes" .zsh.theme) }}
+{{ end }}
+
+{{ if .zsh.use_old_annexes }}
+# - - - - - - - - - - - - - - - - - - - -
+# Annexes
+# - - - - - - - - - - - - - - - - - - - -
+
+# These provide the following functionality:
+#       * bin-gem-node: can create and manage executable shims
+#       * submods: allows zinit to clone into submodules
+#       * declare-zsh: allows CLI parsing and modification of .zshrc
+zinit light-mode for \
+    zdharma-continuum/declare-zsh
+    zinit-zsh/zinit-annex-bin-gem-node \
+    zinit-zsh/zinit-annex-submods \
+{{ end }}
+
+# - - - - - - - - - - - - - - - - - - - -
+# ZSH Opts
+# - - - - - - - - - - - - - - - - - - - -
+
+{{ includeTemplate "zsh/opts.zsh" }}
+
+# - - - - - - - - - - - - - - - - - - - -
+# Completion settings (zstyle)
+# - - - - - - - - - - - - - - - - - - - -
+
+{{ includeTemplate "zsh/zstyle.zsh" }}
+
+# - - - - - - - - - - - - - - - - - - - -
+# Plugins
+# - - - - - - - - - - - - - - - - - - - -
+
+{{- $plugin_files := joinPath $zsh_tmpls "plugins.{yml,yaml}" | glob -}}
+{{- $plugin_files = concat $plugin_files (joinPath $zsh_tmpls "plugins.d" "**" "*.{yaml,yml}" | glob | sortAlpha) -}}
+{{- range $file := $plugin_files -}}
+  {{- $contents := includeTemplate $file $data | fromYaml -}}
+  {{- if eq (kindOf $contents) "map" -}}
+    {{- $plugins := includeTemplate $file $data | fromYaml | jq ".plugins[]" -}}
+    {{- range $plugins -}}
+      {{- includeTemplate "zsh/plugin" . -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+# - - - - - - - - - - - - - - - - - - - -
+# User Configuration
+# - - - - - - - - - - - - - - - - - - - -
+
+
+# - - - - - - - - - - - - - - - - - - - -
+# End Profiling Script
+# - - - - - - - - - - - - - - - - - - - -
+
+if [[ "$PROFILE_STARTUP" == true ]]; then
+    unsetopt xtrace
+    exec 2>&3 3>&-
+    zprof > ~/zshprofile$(date +'%s')
+fi
+
+# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh

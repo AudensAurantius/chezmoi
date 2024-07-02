@@ -1,0 +1,3 @@
+# Load pure theme
+zinit ice pick"async.zsh" src"pure.zsh" # with zsh-async library that's bundled with it.
+zinit light sindresorhus/pure

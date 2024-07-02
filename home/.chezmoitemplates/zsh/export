@@ -1,0 +1,6 @@
+{{- $value := get . "value" -}}
+{{- if eq (kindOf $value) "slice" -}}
+export {{ get . "name" }}={{ cat "(" (quoteList $value | join " ") ")" }}
+{{- else -}}
+export {{ get . "name" }}={{ quote $value }}
+{{- end -}}

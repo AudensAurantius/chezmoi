@@ -123,7 +123,7 @@ export GPG_TTY=$(tty)
 # Refresh gpg-agent tty in case user switches into an X session
 gpg-connect-agent updatestartuptty /bye > /dev/null
 
-ssh-add ~/.ssh/mhaynes_BoldOrange_DellXPS
+ssh-add ~/.ssh/mhaynes_BoldOrange_Razer
 
 # other scripts in ~/.bashrc.d
 if [ -d ~/.bashrc.d ]; then

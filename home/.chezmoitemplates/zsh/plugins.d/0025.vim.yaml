@@ -1,0 +1,6 @@
+plugins:
+  - args: ["wait", "lucid", "light-mode"]
+    for:
+      - url: softmoth/zsh-vim-mode
+        ice:
+          - atload"bindkey -v '^R' fzf-history-widget"

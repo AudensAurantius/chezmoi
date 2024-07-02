@@ -1,0 +1,19 @@
+{{- if .zsh.use_marker -}}
+plugins:
+  - args:
+      - light
+    ice:
+      - lucid
+      - wait
+      - as"program"
+      - pick"bin/marker"
+      - src"bin/marker.sh"
+    url: antimike/marker.git
+    export:
+      name: MARKER_DATA_HOME
+      value: {{ joinPath .filesystem.appData "marker" | quote }}
+    command: |
+      bindkey '\em' _marker_mark_1
+      bindkey '\ej' _marker_mark_2
+      bindkey '^j' _move_cursor_to_next_placeholder
+{{- end -}}

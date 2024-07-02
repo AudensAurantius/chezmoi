@@ -1,0 +1,10 @@
+plugins:
+  - args:
+      - as"program"
+      - make'!'
+      - atclone'./direnv hook zsh > zhook.zsh'
+      - atpull'%atclone'
+      - pick"direnv"
+      - src"zhook.zsh"
+    for:
+      - url: direnv/direnv

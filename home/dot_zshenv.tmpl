@@ -1,0 +1,19 @@
+# Temp dir
+export TMPDIR={{ .filesystem.tmpDir | quote }}
+
+export SHELL={{ .shell }}
+
+# User specific environment
+if ! [[ "$PATH" =~ "$HOME/.local/bin:$HOME/bin:" ]]
+then
+    PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+fi
+export PATH
+
+# Text editor: NVim
+export EDITOR={{ .editor }}
+export VISUAL={{ .editor }}
+
+# SSH
+export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)
+gpgconf --launch gpg-agent

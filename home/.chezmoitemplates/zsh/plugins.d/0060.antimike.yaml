@@ -1,0 +1,7 @@
+plugins:
+  - args:
+      - wait
+      - lucid
+    for:
+      - url: antimike/opus.plugin.zsh.git
+      - url: antimike/wdnote.git

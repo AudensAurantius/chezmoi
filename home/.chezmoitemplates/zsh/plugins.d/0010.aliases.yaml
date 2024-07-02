@@ -1,0 +1,11 @@
+plugins:
+  - args:
+      - wait
+      - lucid
+    for:
+      - url: OMZ::lib/git.zsh
+      - url: OMZ::lib/clipboard.zsh
+      - url: OMZ::lib/directories.zsh
+      - url: OMZ::plugins/git/git.plugin.zsh
+        ice:
+          - atload"unalias grv"

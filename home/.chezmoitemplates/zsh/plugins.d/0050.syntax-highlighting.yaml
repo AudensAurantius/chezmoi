@@ -1,0 +1,20 @@
+plugins:
+  - args: ["wait", "light-mode", "lucid"]
+    for:
+      # This has to come before syntax-highlight
+      - url: hlissner/zsh-autopair
+        ice:
+          - blockf
+          - atinit"zicompinit; zicdreplay"
+  - args: ["wait'2'", "light-mode", "lucid"]
+    for:
+      - url: zdharma-continuum/fast-syntax-highlighting
+        ice:
+          - atinit"ZINIT[COMPINIT_OPTS]=-C; zicompinit; zicdreplay"
+      - url: zsh-users/zsh-completions
+        ice:
+          - blockf
+      - url: zsh-users/zsh-autosuggestions
+        ice:
+          - atload"!_zsh_autosuggest_start"
+

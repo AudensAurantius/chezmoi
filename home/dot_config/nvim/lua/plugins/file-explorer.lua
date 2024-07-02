@@ -15,7 +15,7 @@ return {
 
       float = {
         -- Floating window border (see ':h nvim_open_win')
-        border = "rounded",
+        border = "single",
 
         -- Highlight group for floating window/border (see ':h winhl')
         float_hl = "Normal",

@@ -1,0 +1,43 @@
+plugins:
+  - args:
+      - wait
+      - lucid
+      - light-mode
+    for:
+      - url: OMZ::lib/compfix.zsh
+      - url: OMZ::lib/completion.zsh
+      - url: OMZ::lib/functions.zsh
+      - url: OMZ::lib/diagnostics.zsh
+      - url: OMZ::lib/git.zsh
+      - url: OMZ::lib/grep.zsh
+      - url: OMZ::lib/key-bindings.zsh
+      - url: OMZ::lib/misc.zsh
+      - url: OMZ::lib/spectrum.zsh
+      - url: OMZ::lib/termsupport.zsh
+      - url: OMZ::plugins/colored-man-pages/colored-man-pages.plugin.zsh
+      - url: OMZ::plugins/fzf/fzf.plugin.zsh
+      - url: OMZ::plugins/safe-paste/safe-paste.plugin.zsh
+      - url: OMZ::plugins/sudo/sudo.plugin.zsh
+      - url: OMZ::plugins/autojump/autojump.plugin.zsh
+      - url: OMZ::plugins/extract/extract.plugin.zsh
+      - url: OMZ::plugins/dirhistory/dirhistory.plugin.zsh
+      - url: OMZ::plugins/copybuffer/copybuffer.plugin.zsh
+      - url: OMZ::plugins/taskwarrior/taskwarrior.plugin.zsh
+      - url: OMZ::plugins/command-not-found/command-not-found.plugin.zsh
+      - url: OMZ::plugins/systemd/systemd.plugin.zsh
+        ice:
+          - as"completion"
+      - url: OMZ::plugins/vi-mode/vi-mode.plugin.zsh
+      - url: zdharma-continuum/zbrowse
+      - url: MenkeTechnologies/zsh-tig-plugin
+      - url: willghatch/zsh-snippets
+      - url: robertzk/send.zsh
+      - url: voronkovich/project.plugin.zsh
+      - url: thuandt/zsh-pipx
+        ice:
+          - as"completion"
+      - url: zpm-zsh/new-file-from-template
+      - url: horosgrisa/mysql-colorize
+      - url: OMZ::plugins/pip/pip.plugin.zsh
+        ice:
+          - as"completion"

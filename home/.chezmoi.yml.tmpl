@@ -1,0 +1,27 @@
+data:
+  filesystem:
+    cacheDir: {{ joinPath .chezmoi.homeDir ".cache" | quote }}
+    appData: {{ joinPath .chezmoi.homeDir ".local" "share" | quote }}
+    sourceDir: {{ joinPath .chezmoi.homeDir "Source" | quote }}
+    tmpDir: /tmp
+  {{- if eq .chezmoi.hostname "Blade16-MHaynes" }}
+  email: "mhaynes@boldorange.com"
+  gpg:
+    keys:
+      signing: "8C2F529921F562F5697658BE8F5BBECF8A19FE04"
+  shell: zsh
+  editor: nvim
+  {{- else }}
+  email: "antihaynes@gmail.com"
+  gpg:
+    keys:
+      signing: "AEB43E83657EFBEDB5D61B2862716B9F210A3233"
+  terminal: kitty
+  shell: {{ $zsh := lookPath "zsh" }}{{ if $zsh -}}
+    {{ $zsh }}{{ else -}}
+    {{ lookPath "sh" }}{{ end }}
+  editor: {{ if lookPath "nvim" -}}nvim
+    {{- else if lookPath "vim" }}vim
+    {{- else }}vi{{ end }}
+  enable_systemd_session_services: {{ eq .chezmoi.hostname "voidmobile" }}
+  {{- end }}

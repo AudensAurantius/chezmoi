@@ -2,8 +2,13 @@ AddKeysToAgent yes
 
 Host ssh.dev.azure.com
 	User git
-	IdentityFile ~/.ssh/mhaynes_BoldOrange_DellXPS
+	IdentityFile ~/.ssh/mhaynes_BoldOrange_Razer
 
 Host github.com
 	User git
-	IdentityFile ~/.ssh/smartcard.pub
+	IdentityFile ~/.ssh/mhaynes_BoldOrange_Razer
+
+Host antimike.github.com
+	User git
+    HostName github.com
+	IdentityFile ~/.ssh/antimike_razer_rsa

@@ -1,0 +1,9 @@
+plugins:
+  - args: ["wait", "lucid", "light-mode"]
+    for:
+      - url: Aloxaf/fzf-tab
+  - args:
+      - snippet
+    url: https://raw.githubusercontent.com/junegunn/fzf-git.sh/main/fzf-git.sh
+    comment: |
+      FZF + git keybinds

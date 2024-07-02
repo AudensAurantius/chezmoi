@@ -1,0 +1,50 @@
+plugins:
+  - args:
+      - wait
+      - lucid
+      - light-mode
+    for:
+      - url: Vifon/deer
+        ice:
+          - autoload'deer' 
+          - atload"zle -N deer && bindkey '\ek' deer"
+      - url: MenkeTechnologies/zsh-learn
+        ice:
+          - nocompile
+      - url: MenkeTechnologies/zsh-git-acp
+        ice:
+          - nocompile
+      - url: MenkeTechnologies/zsh-sed-sub
+        ice:
+          - nocompile
+      - url: kazhala/dotbare
+      - url: reegnz/jq-zsh-plugin
+      - url: caIamity/lacrimae.git
+      - url: unixorn/warhol.plugin.zsh.git
+        ice:
+          - subst'which -> builtin which'
+      - url: mafredri/zsh-async
+      - url: rupa/z
+      - url: changyuheng/fz
+      - url: molovo/tipz
+      - url: mattmc3/zman
+  - args:
+      - load
+    url: zdharma-continuum/zplugin-crasis
+    ice:
+      - lucid
+      - wait'[[ -n ${ZLAST_COMMANDS[(r)cras*]} ]]'
+  - args:
+      - wait
+      - lucid
+    for:
+      - url: zdharma-continuum/zui
+      - url: z-shell/zi-console
+  - args:
+      - as"completion"
+      - pick"contrib/zsh_completion/_autorandr"
+      - wait
+      - lucid
+      - light-mode
+    for:
+      - url: phillipberndt/autorandr

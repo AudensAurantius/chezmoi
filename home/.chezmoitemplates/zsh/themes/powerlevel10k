@@ -1,0 +1,5 @@
+# Load powerlevel10k
+# Provide A Simple Prompt Till The Theme Loads
+PS1="READY >"
+zinit ice depth'1' lucid
+zinit light romkatv/powerlevel10k

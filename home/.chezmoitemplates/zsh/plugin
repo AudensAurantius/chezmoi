@@ -1,0 +1,27 @@
+{{- if eq (kindOf .) "map" -}}
+{{- $exports := (default (list) (get . "exports")) -}}
+{{- $commands := (default (list) (get . "commands")) -}}
+{{- if (hasKey . "export") }}{{ $exports = prepend $exports .export -}}{{- end -}}
+{{- if hasKey . "command" }}{{ $commands = prepend $commands .command -}}{{- end -}}
+{{- $cmd_line := join " " .args | cat "zinit" }}
+{{- if hasKey . "for" -}}
+  {{- $cmd_lines := cat $cmd_line "for" | list -}}
+  {{- range .for -}}
+    {{- if hasKey . "export" }}{{ $exports = .export | append $exports }}{{ end -}}
+    {{- if hasKey . "exports" }}{{ $exports = .exports | concat $exports }}{{ end -}}
+    {{- if hasKey . "command" }}{{ $commands = .command | append $commands }}{{ end -}}
+    {{- if hasKey . "commands" }}{{ $commands = .commands | concat $commands }}{{ end -}}
+    {{- if hasKey . "ice" }}{{ $cmd_lines = join " " .ice | indent 2 | append $cmd_lines }}{{ end -}}
+    {{- $cmd_lines = .url | indent 4 | append $cmd_lines -}}
+  {{- end -}}
+  {{- $cmd_line = join " \\\n" $cmd_lines -}}
+{{- else -}}
+  {{- $cmd_line = .url | cat $cmd_line }}
+{{- end -}}
+{{ range $exports -}}
+  {{- includeTemplate "zsh/export" . }}
+{{ end }}
+{{- if hasKey . "ice" }}{{ join " " .ice | cat "zinit ice" }}{{ end }}
+{{ $cmd_line }}
+{{ join "\n" $commands }}
+{{- end -}}

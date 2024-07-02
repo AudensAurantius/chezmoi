@@ -1,0 +1,10 @@
+plugins:
+  - args: ["wait", "lucid", "light-mode"]
+    for:
+      - url: ianthehenry/zsh-autoquoter
+        export:
+          # Array of command prefixes whose args will be autoquoted
+          name: ZAQ_PREFIXES
+          value:
+            - git commit -m
+            - git commit -am
