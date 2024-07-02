@@ -3,6 +3,7 @@ packages:
     - adduser
     - apt
     - apt-utils
+    - autojump
     - base-files
     - base-passwd
     - bash
@@ -247,6 +248,7 @@ packages:
     - webcamd
     - wget
     - whiptail
+    - wmctrl
     - wofi
     - x11-apps
     - xclip

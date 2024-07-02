@@ -1,0 +1,34 @@
+#!/bin/bash
+# Launches a named Kitty session
+
+SESSION="$1"
+
+declare -a opts=(
+	--session "${HOME}/.config/kitty/sessions/${SESSION}.conf"
+	--instance-group "${SESSION^^}"
+	--listen-on unix:/tmp/kitty-"$SESSION"
+)
+
+case "$SESSION" in
+notes)
+	opts+=(
+		--class floater
+		--override background_opacity=0.8
+		--override tab_bar_style=hidden
+	)
+	;;
+media)
+	opts+=(
+		--class dropdown
+		--override background_opacity=0.8
+	)
+	;;
+esac
+
+declare -a cmd=("kitty")
+if [[ "$2" = "--i3" ]]; then
+	shift 2
+	cmd=("kitti3" "$@" --)
+fi
+
+"${cmd[@]}" "${opts[@]}"
