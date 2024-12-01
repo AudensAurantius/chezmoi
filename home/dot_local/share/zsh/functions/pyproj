@@ -1,19 +1,74 @@
 #!/bin/zsh -f
 # project
 
-local name=$1 project_template=~/Source/.project-template/
-local dest=~/Source/$name
+function print_help() {
+  print -u2 -l \
+    "Usage: pyproj -n PROJECT_NAME [-u GITHUB_USER]" \
+    "" \
+    "Options:" \
+    "  -n, --name       project name"
+    "  -u, --user       GitHub username"
+}
+
+# for options parsing
+zmodload zsh/zutil
+
+local project_template=~/Source/.pyproj/
+local -A opts
+
+zparseopts -D -F -K -M -A opts -- n:=-name u:=-user -name: -user:
+
+if [[ ! $? -eq 0 ]]; then
+  print_help
+  return 4
+elif [[ ! -d $project_template ]]; then
+  print -u2 "Project template $name not found"
+  return 2
+elif [[ ! -v opts[--name] ]]; then
+  print -u2 "Error: Please provide project name"
+  print_help
+  return 3
+fi
+
+local name=$(tr -- "[:blank:]" "_" <<<$opts[--name])
+local dest=~/Source/python-projects/$name
 
 if [[ -e $dest ]]; then
-  print -u2 "Unable to create project ${name}: ${dest} already exists"
+  print -u2 "Error: Unable to create project ${name}: ${dest} already exists"
   return 1
 fi
+
+print -u2 -l "Project name: $name" "Destination: $dest"
 mkdir -p $(dirname $dest)
 
 cp -r $project_template $dest
 cd $dest
+rm -rf .git
 git init . &&
-  print -l ".envrc" ".ipython" ".direnv" ".jukit" >>./.git/info/exclude &&
+  print -l ".envrc" ".ipython" ".direnv" ".jukit" ".ripgreprc" >>./.git/info/exclude &&
   git add .gitignore && git commit -m "Ignore swapfiles and __pycache__" &&
   git add requirements.txt && git commit -m "Add standard dependencies"
-direnv allow . && pip install --upgrade pip && pip install -r requirements.txt
+
+direnv allow .
+
+if [[ -v opts[--user] ]]; then
+  local user="${opts[--user]:l}"
+  if [[ $user == audensaurantius ]]; then
+    print -l \
+      'export GITHUB_USER=AudensAurantius' \
+      'export GITHUB_TOKEN="$(pass show professional/Bold_Orange/github/tokens/Razer | head -1)"' \
+      'export GH_TOKEN="$GITHUB_TOKEN"' >>.envrc
+    direnv allow .
+  elif [[ $user == antimike ]]; then
+    print -l \
+      'export GITHUB_USER=antimike' \
+      'export GITHUB_TOKEN="$(pass show professional/Bold_Orange/github/tokens/Razer | head -1)"' \
+      'export GH_TOKEN="$GITHUB_TOKEN"' >>.envrc
+    direnv allow .
+  else
+    print "export GITHUB_USER=\"${opts[--user]}\"" >>.envrc
+    print -u2 "Github user ${opts[--user]} not recognized--no token added to .envrc"
+  fi
+fi
+
+pip install --upgrade pip && pip install -r requirements.txt
