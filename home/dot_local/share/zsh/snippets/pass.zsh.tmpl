@@ -1,0 +1,5 @@
+export PASSWORD_STORE_ENABLE_EXTENSIONS=true
+{{ if eq .chezmoi.hostname "Blade16-MHaynes" -}}
+export BEMENU_BACKEND=curses
+export PASS_DMENU="bemenu --binding vim --scrollbar --wrap"
+{{- end }}
