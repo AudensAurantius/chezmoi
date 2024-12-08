@@ -1,0 +1,30 @@
+#!/bin/sh
+
+# Python deps
+if [ ! -e {{ .filesystem.venvDir | squote }} ]; then
+  mkdir -p {{ .filesystem.venvDir | squote }}
+fi
+
+VENV={{ joinPath .filesystem.venvDir "neovim" | squote }}
+
+python3 -m venv "$VENV" \
+  && "${VENV}/bin/python3" -m pip install --upgrade pip \
+  && "${VENV}/bin/python3" -m pip install --upgrade pynvim neovim
+
+# Ruby deps
+# TODO: Figure out why this isn't working (still fails healthcheck)
+sudo apt-get install -y ruby ruby-rubygems rubygems-integration
+sudo gem install neovim
+
+# Node deps
+sudo apt-get install -y npm
+export NPM_INSTALL_PREFIX="${NPM_INSTALL_PREFIX:-{{ .filesystem.npmDir }}}"
+mkdir -p "$NPM_INSTALL_PREFIX"
+npm config set prefix "$NPM_INSTALL_PREFIX"
+npm install -g neovim
+
+# LaTeX
+sudo apt-get install -y latexmk biber
+
+# Misc
+sudo apt-get install -y chafa ueberzug
