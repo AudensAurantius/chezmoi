@@ -8,6 +8,7 @@ return {
 	{ "sainnhe/edge", priority = 1000 },
 	{ "bluz71/vim-moonfly-colors", priority = 1000 },
 	{ "wuelnerdotexe/vim-enfocado", priority = 1000 },
+	{ "theniceboy/nvim-deus", priority = 1000 },
 	{
 		"oxfist/night-owl.nvim",
 		lazy = false, -- make sure we load this during startup if it is your main colorscheme
@@ -390,21 +391,23 @@ return {
 	{
 		"Shatur/neovim-ayu",
 		priority = 1000,
-		opts = {
-			mirage = false, -- Set to `true` to use `mirage` variant instead of `dark` for dark background.
-			terminal = true, -- Set to `false` to let terminal manage its own colors.
-			overrides = {
-				Normal = { bg = "None" },
-				ColorColumn = { bg = "None" },
-				SignColumn = { bg = "None" },
-				Folded = { bg = "None" },
-				FoldColumn = { bg = "None" },
-				CursorLine = { bg = "None" },
-				CursorColumn = { bg = "None" },
-				WhichKeyFloat = { bg = "None" },
-				VertSplit = { bg = "None" },
-			},
-		},
+		config = function()
+			require("ayu").setup({
+				mirage = false, -- Set to `true` to use `mirage` variant instead of `dark` for dark background.
+				terminal = true, -- Set to `false` to let terminal manage its own colors.
+				overrides = {
+					Normal = { bg = "None" },
+					ColorColumn = { bg = "None" },
+					SignColumn = { bg = "None" },
+					Folded = { bg = "None" },
+					FoldColumn = { bg = "None" },
+					CursorLine = { bg = "None" },
+					CursorColumn = { bg = "None" },
+					WhichKeyFloat = { bg = "None" },
+					VertSplit = { bg = "None" },
+				},
+			})
+		end,
 	},
 	{
 		"EdenEast/nightfox.nvim",
