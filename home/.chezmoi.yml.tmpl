@@ -4,6 +4,8 @@ data:
     appData: {{ joinPath .chezmoi.homeDir ".local" "share" | quote }}
     sourceDir: {{ joinPath .chezmoi.homeDir "Source" | quote }}
     tmpDir: /tmp
+    venvDir: {{ joinPath .chezmoi.homeDir ".venv" | quote }}
+    npmDir: {{ joinPath .chezmoi.homeDir ".npm-packages" }}
   {{- if eq .chezmoi.hostname "Blade16-MHaynes" }}
   email: "mhaynes@boldorange.com"
   gpg:
