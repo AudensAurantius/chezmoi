@@ -34,17 +34,33 @@ return {
 					mappings = {
 						-- set mapping to `false` to disable it
 						i = {
-							["<cr>"] = require("telescope-undo.actions").yank_additions,
-							["<S-cr>"] = require("telescope-undo.actions").yank_deletions,
-							["<C-cr>"] = require("telescope-undo.actions").restore,
+							["<cr>"] = function(bufnr)
+								return require("telescope-undo.actions").yank_additions
+							end,
+							["<S-cr>"] = function(bufnr)
+								return require("telescope-undo.actions").yank_deletions
+							end,
+							["<C-cr>"] = function(bufnr)
+								return require("telescope-undo.actions").restore
+							end,
 							-- alternative defaults, for users whose terminals do questionable things with modified <cr>
-							["<C-y>"] = require("telescope-undo.actions").yank_deletions,
-							["<C-r>"] = require("telescope-undo.actions").restore,
+							["<C-y>"] = function(bufnr)
+								return require("telescope-undo.actions").yank_deletions
+							end,
+							["<C-r>"] = function(bufnr)
+								return require("telescope-undo.actions").restore
+							end,
 						},
 						n = {
-							["y"] = require("telescope-undo.actions").yank_additions,
-							["Y"] = require("telescope-undo.actions").yank_deletions,
-							["u"] = require("telescope-undo.actions").restore,
+							["y"] = function(bufnr)
+								return require("telescope-undo.actions").yank_additions
+							end,
+							["Y"] = function(bufnr)
+								return require("telescope-undo.actions").yank_deletions
+							end,
+							["u"] = function(bufnr)
+								return require("telescope-undo.actions").restore
+							end,
 						},
 					},
 				},
