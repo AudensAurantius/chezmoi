@@ -149,3 +149,8 @@ eval "$(pyenv virtualenv-init -)"
 
 # direnv
 eval "$(direnv hook bash)"
+
+# cargo
+if [[ -e "$HOME/.cargo/env" ]]; then
+  . "$HOME/.cargo/env"
+fi

@@ -17,3 +17,8 @@ export VISUAL={{ .editor }}
 # SSH
 export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)
 gpgconf --launch gpg-agent
+
+# cargo
+if [[ -e "$HOME/.cargo/env" ]]; then
+  . "$HOME/.cargo/env"
+fi
