@@ -35,3 +35,8 @@ eval "$(pyenv init -)"
 if [[ -e "$HOME/.cargo/env" ]]; then
   . "$HOME/.cargo/env"
 fi
+
+# Coursier
+if [[ -e "$HOME/.local/share/coursier/bin" ]]; then
+  export PATH="$PATH:$HOME/.local/share/coursier/bin"
+fi
