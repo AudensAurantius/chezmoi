@@ -7,7 +7,6 @@ return {
 				"shellcheck",
 				"shfmt",
 				"ruff",
-				"ruff-lsp",
 				"jedi-language-server",
 				"isort",
 			},
