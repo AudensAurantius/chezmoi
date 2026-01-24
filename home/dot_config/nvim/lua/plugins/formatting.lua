@@ -50,7 +50,7 @@ return {
 				lua = { "stylua" },
 				fish = { "fish_indent" },
 				sh = { "shfmt" },
-				python = { "black", "isort" },
+				python = { "ruff", "isort" },
 				c = { "clang-format" },
 			},
 			-- The options you set here will be merged with the builtin formatters.
