@@ -74,10 +74,10 @@ return {
       hooks = {},
     },
     keys = {
-      { "<leader>gd", "<cmd>DiffviewOpen<cr>", desc = "Diffview open" },
-      { "<leader>gD", "<cmd>DiffviewClose<cr>", desc = "Diffview close" },
-      { "<leader>gh", "<cmd>DiffviewFileHistory %<cr>", desc = "File history (current)" },
-      { "<leader>gH", "<cmd>DiffviewFileHistory<cr>", desc = "File history (repo)" },
+      { "<leader>gv", "<cmd>DiffviewOpen<cr>", desc = "Diffview open" },
+      { "<leader>gV", "<cmd>DiffviewClose<cr>", desc = "Diffview close" },
+      { "<leader>gF", "<cmd>DiffviewFileHistory %<cr>", desc = "File history (current)" },
+      { "<leader>gA", "<cmd>DiffviewFileHistory<cr>", desc = "File history (all)" },
     },
   },
 }

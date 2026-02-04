@@ -1,3 +1,11 @@
+-- NOTE: LazyVim already includes harpoon with these default keybindings:
+--   <leader>h  - Harpoon Quick Menu
+--   <leader>H  - Add file to Harpoon
+--   <leader>1-9 - Jump to Harpoon files 1-9
+--
+-- This config extends LazyVim's harpoon with additional keybindings.
+-- Remove this file if you prefer LazyVim's defaults.
+
 return {
   {
     "ThePrimeagen/harpoon",
@@ -11,14 +19,14 @@ return {
     },
     keys = {
       {
-        "<leader>ha",
+        "<leader>Ha",
         function()
           require("harpoon"):list():add()
         end,
         desc = "Harpoon add file",
       },
       {
-        "<leader>hh",
+        "<leader>Hh",
         function()
           local harpoon = require("harpoon")
           harpoon.ui:toggle_quick_menu(harpoon:list())
@@ -26,42 +34,14 @@ return {
         desc = "Harpoon quick menu",
       },
       {
-        "<leader>h1",
-        function()
-          require("harpoon"):list():select(1)
-        end,
-        desc = "Harpoon file 1",
-      },
-      {
-        "<leader>h2",
-        function()
-          require("harpoon"):list():select(2)
-        end,
-        desc = "Harpoon file 2",
-      },
-      {
-        "<leader>h3",
-        function()
-          require("harpoon"):list():select(3)
-        end,
-        desc = "Harpoon file 3",
-      },
-      {
-        "<leader>h4",
-        function()
-          require("harpoon"):list():select(4)
-        end,
-        desc = "Harpoon file 4",
-      },
-      {
-        "<leader>hp",
+        "<leader>Hp",
         function()
           require("harpoon"):list():prev()
         end,
         desc = "Harpoon prev",
       },
       {
-        "<leader>hn",
+        "<leader>Hn",
         function()
           require("harpoon"):list():next()
         end,

@@ -144,8 +144,8 @@ return {
       },
     },
     keys = {
-      { "<leader>cs", "<cmd>AerialToggle!<cr>", desc = "Aerial (Symbols)" },
-      { "<leader>cS", "<cmd>AerialNavToggle<cr>", desc = "Aerial Nav" },
+      { "<leader>co", "<cmd>AerialToggle!<cr>", desc = "Aerial (Outline)" },
+      { "<leader>cO", "<cmd>AerialNavToggle<cr>", desc = "Aerial Nav" },
     },
   },
 }
