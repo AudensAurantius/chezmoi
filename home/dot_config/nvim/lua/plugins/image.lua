@@ -27,6 +27,12 @@ return {
   {
     "vhyrro/luarocks.nvim",
     priority = 1000,
-    config = true,
+    opts = {},
+    config = function(_, opts)
+      -- Add the vendor path that luarocks.loader needs for dkjson
+      local rocks_path = vim.fn.stdpath("data") .. "/lazy/luarocks.nvim/.rocks"
+      package.path = rocks_path .. "/share/lua/5.1/luarocks/vendor/?.lua;" .. package.path
+      require("luarocks-nvim").setup(opts)
+    end,
   },
 }
