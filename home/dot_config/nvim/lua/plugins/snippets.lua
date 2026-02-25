@@ -3,10 +3,14 @@ return {
     "saghen/blink.cmp",
     opts = {
       sources = {
-        snippets = {
-          search_paths = {
-            vim.fn.stdpath("config") .. "/snippets",
-            vim.fn.getcwd() .. "/.vscode",
+        providers = {
+          snippets = {
+            opts = {
+              search_paths = {
+                vim.fn.stdpath("config") .. "/snippets",
+                vim.fn.getcwd() .. "/.vscode",
+              },
+            },
           },
         },
       },
