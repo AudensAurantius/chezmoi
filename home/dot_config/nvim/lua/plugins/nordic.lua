@@ -1,6 +1,7 @@
 return {
   {
     "AlexvZyl/nordic.nvim",
+    lazy = true,
     priority = 1000,
     opts = {
       -- Theme style: "flat" or "classic"

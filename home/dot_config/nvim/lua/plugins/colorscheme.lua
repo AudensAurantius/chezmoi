@@ -1,17 +1,17 @@
 return {
 	-- add gruvbox
-	{ "lunarvim/darkplus.nvim", priority = 1000 },
-	{ "Mofiqul/dracula.nvim", priority = 1000 },
-	{ "shaunsingh/nord.nvim", priority = 1000 },
-	{ "ishan9299/nvim-solarized-lua", priority = 1000 },
-	{ "sainnhe/sonokai", priority = 1000 },
-	{ "sainnhe/edge", priority = 1000 },
-	{ "bluz71/vim-moonfly-colors", priority = 1000 },
-	{ "wuelnerdotexe/vim-enfocado", priority = 1000 },
-	{ "theniceboy/nvim-deus", priority = 1000 },
+	{ "lunarvim/darkplus.nvim", lazy = true, priority = 1000 },
+	{ "Mofiqul/dracula.nvim", lazy = true, priority = 1000 },
+	{ "shaunsingh/nord.nvim", lazy = true, priority = 1000 },
+	{ "ishan9299/nvim-solarized-lua", lazy = true, priority = 1000 },
+	{ "sainnhe/sonokai", lazy = true, priority = 1000 },
+	{ "sainnhe/edge", lazy = true, priority = 1000 },
+	{ "bluz71/vim-moonfly-colors", lazy = true, priority = 1000 },
+	{ "wuelnerdotexe/vim-enfocado", lazy = true, priority = 1000 },
+	{ "theniceboy/nvim-deus", lazy = true, priority = 1000 },
 	{
 		"oxfist/night-owl.nvim",
-		lazy = false, -- make sure we load this during startup if it is your main colorscheme
+		lazy = true, -- make sure we load this during startup if it is your main colorscheme
 		priority = 1000, -- make sure to load this before all the other start plugins
 		config = function()
 			-- load the colorscheme here
@@ -27,7 +27,7 @@ return {
 	},
 	{
 		"maxmx03/fluoromachine.nvim",
-		lazy = false,
+		lazy = true,
 		priority = 1000,
 		config = function()
 			local fm = require("fluoromachine")
@@ -80,6 +80,7 @@ return {
 	},
 	{
 		"marko-cerovac/material.nvim",
+		lazy = true,
 		priority = 1000,
 		opts = {
 
@@ -164,12 +165,12 @@ return {
 	},
 	{
 		"scottmckendry/cyberdream.nvim",
-		lazy = false,
+		lazy = true,
 		priority = 1000,
 	},
 	{
 		"ribru17/bamboo.nvim",
-		lazy = false,
+		lazy = true,
 		priority = 1000,
 		config = function()
 			require("bamboo").setup({
@@ -219,7 +220,7 @@ return {
 	{
 		"neanias/everforest-nvim",
 		version = false,
-		lazy = false,
+		lazy = true,
 		priority = 1000, -- make sure to load this before all the other start plugins
 		-- Optional; default configuration will be used if setup isn't called.
 		config = function()
@@ -230,7 +231,7 @@ return {
 	},
 	{
 		"craftzdog/solarized-osaka.nvim",
-		lazy = false,
+		lazy = true,
 		priority = 1000,
 		opts = {
 			-- your configuration comes here
@@ -268,6 +269,7 @@ return {
 	},
 	{
 		"rebelot/kanagawa.nvim",
+		lazy = true,
 		priority = 1000,
 		opts = {
 			compile = false, -- enable compiling the colorscheme
@@ -296,7 +298,7 @@ return {
 	},
 	{
 		"sho-87/kanagawa-paper.nvim",
-		lazy = false,
+		lazy = true,
 		priority = 1000,
 		opts = {
 			undercurl = true,
@@ -317,6 +319,7 @@ return {
 	},
 	{
 		"navarasu/onedark.nvim",
+		lazy = true,
 		priority = 1000,
 		opts = {
 			-- Main options --
@@ -360,6 +363,7 @@ return {
 	},
 	{
 		"rmehri01/onenord.nvim",
+		lazy = true,
 		priority = 1000,
 		opts = {
 			theme = nil, -- "dark" or "light". Alternatively, remove the option and set vim.o.background instead
@@ -390,6 +394,7 @@ return {
 	},
 	{
 		"Shatur/neovim-ayu",
+		lazy = true,
 		priority = 1000,
 		config = function()
 			require("ayu").setup({
@@ -411,6 +416,7 @@ return {
 	},
 	{
 		"EdenEast/nightfox.nvim",
+		lazy = true,
 		priority = 1000,
 		opts = {
 			options = {
@@ -488,6 +494,7 @@ return {
 	{
 		"catppuccin/nvim",
 		name = "catppuccin",
+		lazy = true,
 		priority = 1000,
 		opts = {
 			flavour = "auto", -- latte, frappe, macchiato, mocha

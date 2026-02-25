@@ -1,6 +1,7 @@
 return {
   {
     "NTBBloodbath/doom-one.nvim",
+    lazy = true,
     priority = 1000,
     config = function()
       -- Settings must be set before colorscheme is loaded

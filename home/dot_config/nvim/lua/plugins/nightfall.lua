@@ -1,6 +1,7 @@
 return {
   {
     "2giosangmitom/nightfall.nvim",
+    lazy = true,
     priority = 1000,
     opts = {
       compile_path = vim.fn.stdpath("cache") .. "/nightfall",

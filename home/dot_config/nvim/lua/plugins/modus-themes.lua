@@ -1,6 +1,7 @@
 return {
   {
     "miikanissi/modus-themes.nvim",
+    lazy = true,
     priority = 1000,
     opts = {
       -- Theme style: "auto", "modus_operandi", "modus_vivendi"

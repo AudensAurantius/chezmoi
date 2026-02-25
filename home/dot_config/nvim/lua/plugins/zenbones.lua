@@ -1,6 +1,7 @@
 return {
   {
     "zenbones-theme/zenbones.nvim",
+    lazy = true,
     priority = 1000,
     dependencies = { "rktjmp/lush.nvim" },
     config = function()

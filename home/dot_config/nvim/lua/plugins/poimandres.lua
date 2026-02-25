@@ -1,6 +1,7 @@
 return {
   {
     "olivercederborg/poimandres.nvim",
+    lazy = true,
     priority = 1000,
     opts = {
       bold_vert_split = false,

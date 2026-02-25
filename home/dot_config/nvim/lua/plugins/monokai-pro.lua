@@ -1,6 +1,7 @@
 return {
   {
     "loctvl842/monokai-pro.nvim",
+    lazy = true,
     priority = 1000,
     opts = {
       transparent_background = false,
