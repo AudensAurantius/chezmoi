@@ -1,7 +1,7 @@
 return {
   {
     "lervag/vimtex",
-    lazy = false,
+    lazy = true,
     init = function()
       -- Viewer settings
       vim.g.vimtex_view_method = "zathura" -- or "skim" on macOS, "sioyek", "mupdf"
