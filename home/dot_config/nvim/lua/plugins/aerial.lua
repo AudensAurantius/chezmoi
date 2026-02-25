@@ -6,7 +6,10 @@ return {
       "nvim-tree/nvim-web-devicons",
     },
     opts = {
-      backends = { "treesitter", "lsp", "markdown", "man" },
+      backends = {
+        cs = { "treesitter" },
+        _ = { "treesitter", "lsp", "markdown", "man" },
+      },
       layout = {
         max_width = { 40, 0.2 },
         width = nil,
