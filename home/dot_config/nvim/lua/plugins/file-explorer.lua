@@ -1,6 +1,7 @@
 return {
   "is0n/fm-nvim",
-  setup = {
+  cmd = { "Lf", "Fm", "Nnn", "Fff", "Twf", "Fzf", "Fzy", "Xplr", "Vifm", "Skim", "Broot", "GitUi", "Ranger", "Joshuto", "Lazygit", "Neomutt", "TaskWarriorTUI" },
+  opts = {
     -- (Vim) Command used to open files
     edit_cmd = "edit",
 
