@@ -1,6 +1,7 @@
 return {
   {
     "3rd/image.nvim",
+    enabled = false,
     dependencies = { "luarocks.nvim" },
     opts = {
       backend = "kitty", -- or "ueberzug" for X11
@@ -26,7 +27,7 @@ return {
   },
   {
     "vhyrro/luarocks.nvim",
-    priority = 1000,
+    lazy = true,
     opts = {},
     config = function(_, opts)
       -- Add the vendor path that luarocks.loader needs for dkjson
