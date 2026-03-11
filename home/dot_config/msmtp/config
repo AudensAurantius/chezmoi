@@ -1,0 +1,45 @@
+# vim:filetype=msmtp
+# vim:syntax=msmtp
+
+defaults
+logfile ~/.msmtp.log
+
+account professional
+host smtp.gmail.com
+port 587
+protocol smtp
+from antihaynes@gmail.com
+auth oauthbearer
+user antihaynes@gmail.com
+#passwordeval qubes-gpg-client -q --no-tty --batch -d ~/.mail-professional-appkey.gpg
+passwordeval /usr/local/bin/get_oauth_token.sh antihaynes@gmail.com mutt_oauth_key
+tls on
+#tls_starttls on
+#tls_trust_file /etc/ssl/certs/ca-certificates.crt 
+
+account csu
+host smtp.office365.com
+port 587
+protocol smtp
+from antimike.haynes@colostate.edu
+#auth oauthbearer
+#auth plain
+#auth oauthbearer
+auth on
+user hactar@colostate.edu
+tls on
+tls_starttls on
+passwordeval qubes-gpg-client -q --no-tty --batch -d ~/.mail-csu.gpg
+
+account personal
+host smtp.gmail.com
+port 587
+protocol smtp
+from mathgeek101@gmail.com
+auth oauthbearer
+user mathgeek101@gmail.com
+#passwordeval qubes-gpg-client -q --no-tty --batch -d ~/.mail-personal-appkey.gpg
+passwordeval /usr/local/bin/get_oauth_token.sh mathgeek101@gmail.com mutt-personal
+tls on
+#tls_starttls on
+#tls_trust_file /etc/ssl/certs/ca-certificates.crt 

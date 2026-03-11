@@ -1,0 +1,9 @@
+# vim: syntax=neomuttrc
+# vim: filetype=neomuttrc
+
+virtual-mailboxes "inbox" "notmuch://?query=tag:inbox"
+virtual-mailboxes "archive" "notmuch://?query=tag:archive"
+virtual-mailboxes "sent" "notmuch://?query=tag:sent"
+virtual-mailboxes "newsletters" "notmuch://?query=tag:newsletters"
+virtual-mailboxes "Unread" "notmuch://?query=tag:unread"
+virtual-mailboxes "Starred"   "notmuch://?query=tag:*"

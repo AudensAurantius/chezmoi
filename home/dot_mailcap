@@ -1,0 +1,23 @@
+application/msword; qvm-open-in-dvm %s
+
+application/vnd.oasis.opendocument.spreadsheet; qvm-open-in-dvm %s
+application/vnd.oasis.opendocument.text; qvm-open-in-dvm %s
+
+image/jpg; qvm-open-in-dvm %s
+image/jpeg; qvm-open-in-dvm %s
+
+image/png; qvm-open-in-dvm %s
+
+image/gif; qvm-open-in-dvm %s
+
+
+application/pdf; qvm-open-in-dvm %s
+
+
+#text/html; qvm-open-in-dvm %s
+text/html; w3m -I %{charset} -T text/html -dump; copiousoutput;
+
+# Order to show multipart attachments:
+alternative_order  text/html text/plain text/enriched
+
+

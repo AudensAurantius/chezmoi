@@ -1,0 +1,14 @@
+#PATH=/bin:/usr/bin
+MAILDIR=/home/user/mail
+CSU_DEFAULT=/home/user/mail/Inbox
+LOGFILE=~/.mutt/procmail.log
+SHELL=/bin/sh
+
+
+#:0 [flags] [ : [locallockfile] ]
+#<zero or more conditions (one per line)>
+#<exactly one action line>
+
+:0
+* ^From.*Eykholt
+'Stat Mech'

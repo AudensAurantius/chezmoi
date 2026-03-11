@@ -1,0 +1,13 @@
+# vim: syntax=neomuttrc
+# vim: filetype=neomuttrc
+
+# Identity
+set realname = "Michael Haynes"
+set use_from
+#set from = "Michael Haynes <Antimike.Haynes@colostate.edu>"
+#alternates '^antihaynes@gmail\.com$'
+#alternates '^mathgeek101@gmail\.com$'
+
+# Accounts
+#folder-hook professional 'source ~/.mutt/muttrc-professional'
+#folder-hook csu 'source ~/.mutt/muttrc-csu'

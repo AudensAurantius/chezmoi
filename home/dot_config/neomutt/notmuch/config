@@ -1,0 +1,45 @@
+# vim: syntax=neomuttrc
+# vim: filetype=neomuttrc
+# notmuch
+set nm_default_uri="notmuch:///home/$USER/mail" # path to the maildir
+#set virtual_spoolfile=yes                          # enable virtual folders
+set nm_exclude_tags = "deleted,spam,archived,junk"
+set nm_record = yes
+set nm_record_tags = "-inbox,archive,me"
+set nm_unread_tag = unread
+set vfolder_format = "%6n(%6N) %f"
+
+# notmuch bindings
+#macro index \\\\ "<vfolder-from-query>"              # looks up a hand made query
+#macro index A "<modify-labels>+archive -unread -inbox\\n"        
+# tag as Archived
+#macro index I "<modify-labels>-inbox -unread\\n"                 
+# removed from inbox
+#macro index S "<modify-labels-then-hide>-inbox -unread +junk\\n" 
+# tag as Junk mail
+#macro index + "<modify-labels>+*\\n<sync-mailbox>"               # tag as starred
+#macro index - "<modify-labels>-*\\n<sync-mailbox>"               # tag as unstarred
+
+# open a different virtual folder
+bind index,pager X change-vfolder
+# read entire thread of the current message
+bind index,pager + entire-thread
+# generate virtual folder from query
+bind index,pager \eX vfolder-from-query
+# generate virtual folder from query with time window
+bind index < vfolder-window-backward
+bind index > vfolder-window-forward
+# toggle between mailboxes and virtual mailboxes
+bind index,pager <F10> sidebar-toggle-virtual
+
+#Invoke notmuch, rebuild threads and tag emails as removed from Inbox?!
+macro index <F8> \
+     "<enter-command>unset wait_key<enter><shell-escape>notmuch-mutt --prompt search<enter><change-folder-readonly>`echo ${XDG_CACHE_HOME:-$HOME/.cache}/notmuch/mutt/results`<enter>" \
+     "notmuch: search mail"
+macro index <F9> \
+     "<enter-command>unset wait_key<enter><pipe-message>notmuch-mutt thread<enter><change-folder-readonly>`echo ${XDG_CACHE_HOME:-$HOME/.cache}/notmuch/mutt/results`<enter><enter-command>set wait_key<enter>" \
+     "notmuch: reconstruct thread"
+macro index <F6> \
+     "<enter-command>unset wait_key<enter><pipe-message>notmuch-mutt tag -Inbox<enter>" \
+     "notmuch: remove message from inbox"
+#Not sure what this F6 option is yet - still investigating

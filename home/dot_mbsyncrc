@@ -1,0 +1,88 @@
+##########
+IMAPAccount professional
+Host imap.gmail.com
+Port 993
+User antihaynes@gmail.com
+#PassCmd "qubes-gpg-client -q --no-tty --batch -d ~/.mail-professional-appkey.gpg"
+PassCmd "qubes-gpg-client -q --no-tty --batch -d ~/.mail-professional-appkey.gpg"
+SSLType IMAPS
+AuthMechs LOGIN
+#UseIMAPS yes
+
+IMAPStore professional-remote
+Account professional
+
+MaildirStore professional-local
+Subfolders Verbatim
+Path ~/mail/professional/
+Inbox ~/mail/professional/Inbox
+
+Channel professional
+Far :professional-remote:
+Near :professional-local:
+#Patterns * !Archives !Lists
+Patterns *
+Create Both
+#Expunge Both
+SyncState *
+
+# Need to use separate channel for each synced mailbox?
+
+##########
+
+IMAPAccount csu
+Host outlook.office365.com
+Port 143
+User hactar@colostate.edu
+#PassCmd "qubes-gpg-client -q --no-tty --batch -d ~/.mail-csu.gpg"
+PassCmd "gpg -q --no-tty --batch -d ~/.csu-password.gpg"
+SSLType STARTTLS
+AuthMechs LOGIN
+
+IMAPStore csu-remote
+Account csu
+
+MaildirStore csu-local
+Subfolders Verbatim
+Path ~/mail/csu/
+Inbox ~/mail/csu/Inbox
+
+Channel csu
+Far :csu-remote:
+Near :csu-local:
+#Patterns * !Archives
+Pattern %
+Create Both
+#Expunge Both
+SyncState *
+
+##########
+IMAPAccount personal
+Host imap.gmail.com
+Port 993
+User mathgeek101@gmail.com
+#PassCmd "qubes-gpg-client -q --no-tty --batch -d ~/.mail-personal-appkey.gpg"
+PassCmd "gpg -q --no-tty --batch -d ~/.personal-appkey.gpg"
+SSLType IMAPS
+AuthMechs LOGIN
+#UseIMAPS yes
+
+IMAPStore personal-remote
+Account personal
+
+MaildirStore personal-local
+Subfolders Verbatim
+Path ~/mail/personal/
+Inbox ~/mail/personal/Inbox
+
+Channel personal
+Far :personal-remote:
+Near :personal-local:
+#Patterns * !Archives !Lists
+Patterns *
+Create Both
+#Expunge Both
+SyncState *
+
+# Need to use separate channel for each synced mailbox?
+
