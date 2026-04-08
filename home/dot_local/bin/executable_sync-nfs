@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Sync Nerd Fonts from WSL (~/.local/share/fonts/) to Windows user fonts.
+#
+# For each .ttf file: copies to the Windows user fonts directory, extracts
+# the font's display name via PowerShell's System.Drawing API, and registers
+# it in the per-user font registry key (HKCU). No admin elevation required.
+#
+# Usage:
+#   sync-nerd-fonts-to-windows.sh [font-family...]
+#
+# Examples:
+#   sync-nerd-fonts-to-windows.sh                    # sync ALL installed Nerd Fonts
+#   sync-nerd-fonts-to-windows.sh JetBrainsMono      # sync one family
+#   sync-nerd-fonts-to-windows.sh Hack Iosevka       # sync multiple families
+
+set -uo pipefail
+
+WSL_FONTS_DIR="$HOME/.local/share/fonts"
+WIN_FONTS_DIR_NATIVE="$(cmd.exe /C 'echo %LOCALAPPDATA%\Microsoft\Windows\Fonts' 2>/dev/null | tr -d '\r')"
+WIN_FONTS_DIR="$(wslpath -u "$WIN_FONTS_DIR_NATIVE")"
+REG_PATH='HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+
+# Collect font families to sync
+if [[ $# -gt 0 ]]; then
+  families=("$@")
+else
+  # All subdirectories in the fonts dir
+  families=()
+  for d in "$WSL_FONTS_DIR"/*/; do
+    [[ -d "$d" ]] && families+=("$(basename "$d")")
+  done
+fi
+
+if [[ ${#families[@]} -eq 0 ]]; then
+  echo "No font families found in $WSL_FONTS_DIR"
+  exit 1
+fi
+
+mkdir -p "$WIN_FONTS_DIR"
+
+copied=0
+skipped=0
+
+for family in "${families[@]}"; do
+  src_dir="$WSL_FONTS_DIR/$family"
+  if [[ ! -d "$src_dir" ]]; then
+    echo "SKIP: $family (not found in $WSL_FONTS_DIR)"
+    continue
+  fi
+
+  echo "--- $family ---"
+
+  for ttf in "$src_dir"/*.ttf; do
+    [[ -f "$ttf" ]] || continue
+    filename="$(basename "$ttf")"
+    dest="$WIN_FONTS_DIR/$filename"
+
+    # Copy if missing or newer
+    if [[ ! -f "$dest" ]] || [[ "$ttf" -nt "$dest" ]]; then
+      cp "$ttf" "$dest"
+      echo "  COPY: $filename"
+      ((copied++))
+    else
+      ((skipped++))
+    fi
+  done
+done
+
+echo ""
+echo "Copied $copied font files ($skipped already up to date)."
+
+if [[ $copied -eq 0 ]]; then
+  echo "No new fonts to register."
+  exit 0
+fi
+
+echo "Registering fonts in Windows registry..."
+
+PS_SCRIPT="$HOME/.local/PowerShell/register-fonts.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$PS_SCRIPT")" -FontDir "$WIN_FONTS_DIR_NATIVE" -RegPath "$REG_PATH"
