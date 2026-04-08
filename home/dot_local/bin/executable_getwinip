@@ -1,0 +1,3 @@
+#!/bin/bash
+
+2>/dev/null cmd.exe /C ipconfig /all | sed -n '/^Wireless LAN adapter/,/^\S/p' | grep IPv4 | awk -vFS=': ' '{print $2;}' | sed 's/(Preferred)//'

@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# claude-init: Bootstrap a new project for Claude Code workflow
+#
+# Usage: claude-init [--full]
+#   --full    Include docs/VISION.md and docs/reviews/ (for team/client projects)
+#   (default) Light setup: CLAUDE.md skeleton + DECISION_LOG.md + settings.local.json
+
+set -euo pipefail
+
+FULL=false
+if [[ "${1:-}" == "--full" ]]; then
+    FULL=true
+fi
+
+PROJECT_ROOT="$(pwd)"
+PROJECT_NAME="$(basename "$PROJECT_ROOT")"
+
+echo "Initializing Claude project in: $PROJECT_ROOT"
+echo "Project name: $PROJECT_NAME"
+echo "Mode: $(if $FULL; then echo 'full'; else echo 'light'; fi)"
+echo ""
+
+# --- CLAUDE.md ---
+if [[ -f CLAUDE.md ]]; then
+    echo "[skip] CLAUDE.md already exists"
+else
+    cat > CLAUDE.md << 'CLAUDE_EOF'
+# CLAUDE.md — PROJECT_NAME_PLACEHOLDER
+
+## Build & Run
+
+```bash
+# TODO: Add build/run commands for this project
+```
+
+## Architecture
+
+```
+# TODO: Add project structure overview
+```
+
+## Key API Contracts
+
+- TODO: Document important interfaces and their contracts
+
+## Coding Conventions
+
+- **Style:** TODO (e.g., ruff for Python, eslint for JS)
+- **Commits:** Conventional Commits (`feat/fix/docs/test/refactor`), include `Co-Authored-By` trailer
+- **Testing:** Run full test suite before commits
+
+## Common Pitfalls
+
+1. TODO: Document recurring bugs and gotchas as they're discovered
+
+## Roadmap
+
+Active roadmap: TODO (e.g., `ROADMAP.md` or memory file reference)
+CLAUDE_EOF
+    sed -i "s/PROJECT_NAME_PLACEHOLDER/$PROJECT_NAME/" CLAUDE.md
+    echo "[created] CLAUDE.md (skeleton — fill in project specifics)"
+fi
+
+# --- DECISION_LOG.md ---
+if [[ -f DECISION_LOG.md ]]; then
+    echo "[skip] DECISION_LOG.md already exists"
+else
+    cat > DECISION_LOG.md << 'DECLOG_EOF'
+# Decision Log
+
+Significant design and architectural decisions, recorded with context for future reference.
+
+<!-- Format:
+### DEC-NNN: Title (YYYY-MM-DD)
+Brief description of the decision and rationale.
+Alternatives considered and why they were rejected.
+-->
+DECLOG_EOF
+    echo "[created] DECISION_LOG.md"
+fi
+
+# --- .claude/settings.local.json ---
+mkdir -p .claude
+if [[ -f .claude/settings.local.json ]]; then
+    echo "[skip] .claude/settings.local.json already exists"
+else
+    cat > .claude/settings.local.json << 'SETTINGS_EOF'
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)"
+    ]
+  }
+}
+SETTINGS_EOF
+    echo "[created] .claude/settings.local.json (add project-specific permissions)"
+fi
+
+# --- Full mode extras ---
+if $FULL; then
+    mkdir -p docs/reviews
+
+    if [[ -f docs/VISION.md ]]; then
+        echo "[skip] docs/VISION.md already exists"
+    else
+        cat > docs/VISION.md << 'VISION_EOF'
+# Project Vision
+
+## Problem Statement
+
+TODO: What problem does this project solve? What is the overall technical vision?
+
+## Goals
+
+- TODO: Specific technical goals
+
+## Current Difficulties
+
+- TODO: Known blockers, open questions, pending decisions
+
+## Non-Goals
+
+- TODO: What is explicitly out of scope?
+VISION_EOF
+        echo "[created] docs/VISION.md"
+    fi
+
+    echo "[created] docs/reviews/ (for review checkpoint summaries)"
+fi
+
+echo ""
+echo "Done. Next steps:"
+echo "  1. Fill in CLAUDE.md with project-specific details"
+echo "  2. Update .claude/settings.local.json with permitted commands"
+if $FULL; then
+    echo "  3. Fill in docs/VISION.md with the project's problem statement"
+fi
