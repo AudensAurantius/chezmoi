@@ -1,0 +1,9 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl") -}}
+#!/bin/bash
+# hash: {{ include (joinPath "dot_config" "etc" "wsl.conf.tmpl") | sha256sum }}
+echo "Syncing wsl.conf to /etc/..." >&2
+chezmoi execute-template < {{ joinPath .chezmoi.sourceDir "dot_config" "etc" "wsl.conf.tmpl" | quote }} | sudo tee /etc/wsl.conf > /dev/null
+echo "Applied wsl.conf. Run 'wsl --shutdown' from Windows to activate changes."
+{{- end }}
+{{- end }}

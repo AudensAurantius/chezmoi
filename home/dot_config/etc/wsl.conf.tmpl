@@ -1,0 +1,9 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl") -}}
+[boot]
+systemd=true
+
+[interop]
+appendWindowsPath = false
+{{- end }}
+{{- end }}

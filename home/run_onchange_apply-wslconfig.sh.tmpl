@@ -1,0 +1,10 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl" ) -}}
+#!/bin/bash
+# hash: {{ include "dot_wslconfig.tmpl" | sha256sum }}
+WINPROFILE="$(wslpath "$(cmd.exe /C 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')")"
+chezmoi execute-template < {{ joinPath .chezmoi.sourceDir "dot_wslconfig.tmpl" | quote }} | unix2dos > "${WINPROFILE}/.wslconfig"
+echo "Applied .wslconfig to ${WINPROFILE}/.wslconfig"
+date +"%Y-%m-%d::%H:%M:%S" >> ~/.wslconfig.update
+{{- end }}
+{{- end }}
