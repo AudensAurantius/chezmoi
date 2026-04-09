@@ -1,0 +1,9 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl" ) -}}
+#!/bin/sh
+# Wrapper around Microsoft's VS Code executable
+# This makes it possible to call `code` without adding /mnt/c/Users/mhaynes/AppData/Local/Programs/Microsoft VS Code/bin to PATH
+
+"/mnt/c/Users/mhaynes/AppData/Local/Programs/Microsoft VS Code/bin/code" "$@"
+{{- end }}
+{{- end }}

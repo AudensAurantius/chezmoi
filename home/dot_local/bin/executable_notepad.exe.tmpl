@@ -1,0 +1,9 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl" ) -}}
+#!/bin/sh
+# Wrapper around Microsoft notepad.exe
+# This makes it possible to call notepad.exe without adding /mnt/c/Windows/system32 to PATH
+
+/mnt/c/Windows/System32/notepad.exe "$@"
+{{- end }}
+{{- end }}

@@ -1,0 +1,9 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl" ) -}}
+#!/bin/sh
+# Wrapper around Microsoft winget.exe
+# This makes it possible to call winget.exe without adding /mnt/c/Users/mhaynes/AppData/Local/Microsoft/WindowsApps to PATH
+
+/mnt/c/Users/mhaynes/AppData/Local/Microsoft/WindowsApps/winget.exe "$@"
+{{- end }}
+{{- end }}

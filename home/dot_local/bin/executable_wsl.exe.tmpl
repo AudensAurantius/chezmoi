@@ -1,0 +1,9 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl" ) -}}
+#!/bin/sh
+# Wrapper around Microsoft wsl.exe
+# This makes it possible to call wsl.exe without adding /mnt/c/Windows/system32 to PATH
+
+/mnt/c/Windows/System32/wsl.exe "$@"
+{{- end }}
+{{- end }}
