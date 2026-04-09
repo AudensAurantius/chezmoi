@@ -10,15 +10,23 @@ then
 fi
 export PATH
 
-# Text editor: NVim
+# Text editor: {{ .editor }}
 export EDITOR={{ .editor }}
 export VISUAL={{ .editor }}
-
-# SSH
-export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)
-gpgconf --launch gpg-agent
 
 # cargo
 if [[ -e "$HOME/.cargo/env" ]]; then
   . "$HOME/.cargo/env"
 fi
+
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl" ) }}
+
+# WSL
+path+=(
+  /mnt/c/Windows
+  /mnt/c/Windows/system32
+  /mnt/c/Windows/System32/WindowsPowerShell/v1.0
+)
+{{- end }}
+{{- end }}
