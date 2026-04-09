@@ -10,15 +10,12 @@ plugins:
       - url: OMZ::lib/diagnostics.zsh
       - url: OMZ::lib/git.zsh
       - url: OMZ::lib/grep.zsh
-      - url: OMZ::lib/key-bindings.zsh
       - url: OMZ::lib/misc.zsh
       - url: OMZ::lib/spectrum.zsh
       - url: OMZ::lib/termsupport.zsh
       - url: OMZ::plugins/colored-man-pages/colored-man-pages.plugin.zsh
-      - url: OMZ::plugins/fzf/fzf.plugin.zsh
       - url: OMZ::plugins/safe-paste/safe-paste.plugin.zsh
       - url: OMZ::plugins/sudo/sudo.plugin.zsh
-      - url: OMZ::plugins/autojump/autojump.plugin.zsh
       - url: OMZ::plugins/extract/extract.plugin.zsh
       - url: OMZ::plugins/dirhistory/dirhistory.plugin.zsh
       - url: OMZ::plugins/copybuffer/copybuffer.plugin.zsh
@@ -27,7 +24,6 @@ plugins:
       - url: OMZ::plugins/systemd/systemd.plugin.zsh
         ice:
           - as"completion"
-      - url: OMZ::plugins/vi-mode/vi-mode.plugin.zsh
       - url: zdharma-continuum/zbrowse
       - url: MenkeTechnologies/zsh-tig-plugin
       - url: willghatch/zsh-snippets
@@ -41,3 +37,6 @@ plugins:
       - url: OMZ::plugins/pip/pip.plugin.zsh
         ice:
           - as"completion"
+      - url: OMZ::plugins/fzf/fzf.plugin.zsh
+        ice:
+          - atload"bindkey '^R' fzf-history-widget; bindkey -M vicmd '^R' fzf-history-widget; bindkey -M viins '^R' fzf-history-widget"
