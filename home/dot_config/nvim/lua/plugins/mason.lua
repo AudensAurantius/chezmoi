@@ -1,15 +1,65 @@
+-- Detect whether the nearest .csproj is SDK-style (<Project Sdk=) or old-style.
+-- Returns the project root if the predicate matches, nil otherwise.
+local util = require("lspconfig.util")
+
+local function find_csproj_root(fname)
+  return util.root_pattern("*.csproj")(fname)
+    or util.root_pattern("*.sln")(fname)
+    or util.root_pattern("omnisharp.json")(fname)
+end
+
+local function is_sdk_style_project(root)
+  if not root then
+    return nil
+  end
+  -- Find the first .csproj in the root directory
+  local csproj = vim.fn.glob(root .. "/*.csproj")
+  if csproj == "" then
+    -- No .csproj at root (likely matched on .sln or omnisharp.json).
+    -- Fall through to default omnisharp (net6.0) since it handles more cases.
+    return true
+  end
+  -- If glob returned multiple, take the first
+  csproj = vim.split(csproj, "\n")[1]
+  local content = vim.fn.readfile(csproj, "", 5) -- first 5 lines is enough
+  for _, line in ipairs(content) do
+    if line:match("<Project%s+Sdk=") then
+      return true
+    end
+  end
+  return false
+end
+
 return {
-  -- Override LazyVim dotnet extra: use Mono build of OmniSharp for .NET Framework 4.7.2
-  -- old-style csproj support, and disable heavy analyzers/completion
+  -- Dual OmniSharp setup:
+  --   omnisharp (net6.0)  -> SDK-style projects (net6.0, net8.0, etc.)
+  --   omnisharp_mono      -> old-style .NET Framework 4.7.2 projects
   {
     "neovim/nvim-lspconfig",
     opts = {
       servers = {
+        -- net6.0 build: SDK-style projects only
         omnisharp = {
-          cmd = {
-            vim.fn.stdpath("data") .. "/mason/packages/omnisharp-mono/omnisharp-mono",
-            "--languageserver",
-          },
+          root_dir = function(bufnr, on_dir)
+            local fname = vim.api.nvim_buf_get_name(bufnr)
+            local root = find_csproj_root(fname)
+            if root and is_sdk_style_project(root) then
+              on_dir(root)
+            end
+          end,
+          enable_roslyn_analyzers = false,
+          organize_imports_on_format = true,
+          enable_import_completion = false,
+        },
+        -- Mono build: old-style .NET Framework projects only
+        omnisharp_mono = {
+          root_dir = function(bufnr, on_dir)
+            local fname = vim.api.nvim_buf_get_name(bufnr)
+            local root = find_csproj_root(fname)
+            if root and not is_sdk_style_project(root) then
+              on_dir(root)
+            end
+          end,
           enable_roslyn_analyzers = false,
           organize_imports_on_format = true,
           enable_import_completion = false,
