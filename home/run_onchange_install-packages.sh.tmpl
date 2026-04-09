@@ -1,0 +1,15 @@
+#!/bin/bash
+# hash: {{ include (joinPath ".chezmoidata" "packages.yaml") | sha256sum }}
+echo "Package list change detected!" >&2
+{{ if .chezmoi.osRelease.name | hasPrefix "Debian" -}}
+echo "Installing Debian packages..." >&2
+declare -a failed=()
+{{ range .packages.debian -}}
+sudo apt-get install -qq -y {{ . | quote }} 2>&1 || failed+=( {{ . | quote }} )
+{{ end -}}
+if [[ ${#failed[@]} -gt 0 ]]; then
+  echo "Failed to install:"
+  printf '  %s\n' "${failed[@]}"
+  exit 1
+fi >&2
+{{ end -}}
