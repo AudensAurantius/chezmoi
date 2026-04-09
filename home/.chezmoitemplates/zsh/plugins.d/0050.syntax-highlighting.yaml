@@ -5,7 +5,6 @@ plugins:
       - url: hlissner/zsh-autopair
         ice:
           - blockf
-          - atinit"zicompinit; zicdreplay"
   - args: ["wait'2'", "light-mode", "lucid"]
     for:
       - url: zdharma-continuum/fast-syntax-highlighting
@@ -17,4 +16,3 @@ plugins:
       - url: zsh-users/zsh-autosuggestions
         ice:
           - atload"!_zsh_autosuggest_start"
-
