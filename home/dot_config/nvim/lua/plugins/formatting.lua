@@ -52,6 +52,7 @@ return {
         sh = { "shfmt" },
         python = { "ruff_format", "ruff_fix", "ruff_organize_imports" },
         c = { "clang-format" },
+        terraform = { "terraform_fmt" },
       },
       -- The options you set here will be merged with the builtin formatters.
       -- You can also define any custom formatters here.
