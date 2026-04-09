@@ -53,11 +53,15 @@ return {
         },
         -- Mono build: old-style .NET Framework projects only
         omnisharp_mono = {
+          cmd = { "omnisharp-mono", "--languageserver", "--hostPID", tostring(vim.fn.getpid()) },
           root_dir = function(bufnr, on_dir)
             local fname = vim.api.nvim_buf_get_name(bufnr)
             local root = find_csproj_root(fname)
             if root and not is_sdk_style_project(root) then
-              on_dir(root)
+              -- Prefer solution root so $(SolutionDir) resolves correctly
+              -- for cross-repo ProjectReferences that import nuget.targets
+              local sln_root = util.root_pattern("*.sln")(fname)
+              on_dir(sln_root or root)
             end
           end,
           enable_roslyn_analyzers = false,
@@ -71,6 +75,8 @@ return {
     "mason-org/mason-lspconfig.nvim",
     opts = {
       automatic_enable = {
+        "omnisharp",
+        "omnisharp_mono",
         "jedi_language_server",
         "bashls",
         "lua_ls",
