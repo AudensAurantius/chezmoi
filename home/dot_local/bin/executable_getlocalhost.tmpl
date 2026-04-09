@@ -1,0 +1,7 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl" ) -}}
+#!/bin/bash
+
+ip route | grep 'default via' | awk '{print $3;}'
+{{- end }}
+{{- end }}

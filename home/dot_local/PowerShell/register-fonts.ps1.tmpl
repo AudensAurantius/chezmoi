@@ -1,3 +1,5 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl" ) -}}
 # register-fonts.ps1 — Register .ttf fonts in Windows per-user font store (HKCU)
 #
 # Called from sync-nfs (bash). Not directly executable from WSL due to
@@ -58,3 +60,5 @@ public class FontBroadcast {
 [FontBroadcast]::Notify()
 Write-Host "Broadcast WM_FONTCHANGE to running applications."
 Write-Host "NOTE: Windows Terminal must be restarted to pick up new fonts."
+{{- end }}
+{{- end }}
