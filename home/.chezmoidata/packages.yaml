@@ -35,7 +35,9 @@ packages:
     - findutils
     - fzf
     - gcc-12-base
+    - gh
     - git
+    - git-crypt
     - gpg
     - gpgv
     - grep
@@ -275,9 +277,9 @@ packages:
     remote:
       usage:
         - latest
-      go: 
+      go:
         - latest
-      neovim: 
+      neovim:
         - stable
-      node: 
+      node:
         - latest
