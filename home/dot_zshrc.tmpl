@@ -132,3 +132,20 @@ fi
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
+# Bold Orange - Claude Code New Relic Integration
+# Enables Claude Code OpenTelemetry metrics/logs to flow to New Relic
+
+# Enable telemetry in Claude Code
+export CLAUDE_CODE_ENABLE_TELEMETRY=1
+
+# Configure OTLP exporters for metrics and logs
+export OTEL_METRICS_EXPORTER=otlp
+export OTEL_LOGS_EXPORTER=otlp
+
+# Use HTTP with protobuf encoding (required by New Relic)
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+
+# New Relic OTLP endpoint and authentication
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.nr-data.net:4318"
+export OTEL_EXPORTER_OTLP_HEADERS="api-key=9254bfa05e524c76b424ea6be56479d5FFFFNRAL"
