@@ -16,11 +16,11 @@ source "${ZINIT_HOME}/zinit.zsh"
 
 # - - - - - - - - - - - - - - - - - - - -
 # Profiling Tools
-# To turn on profiling, run 'touch ~/.zprofile' and restart the shell
-# To turn off profiling, run 'rm ~/.zprofile' and restart the shell
+# To turn on profiling, run 'touch ~/.zsh-profile-startup' and restart the shell
+# To turn off profiling, run 'rm ~/.zsh-profile-startup' and restart the shell
 # - - - - - - - - - - - - - - - - - - - -
 PROFILE_STARTUP=false
-if [[ -e "${HOME}/.zprofile" ]]; then
+if [[ -e "${HOME}/.zsh-profile-startup" ]]; then
   PROFILE_STARTUP=true
   zmodload zsh/zprof
   # http://zsh.sourceforge.net/Doc/Release/Prompt-Expansion.html
@@ -42,9 +42,9 @@ autoload -Uz compinit promptinit
 # See: https://gist.github.com/ctechols/ca1035271ad134841284
 _comp_files=("${ZCOMP_CACHE}/.zcompdump(Nm-20)")
 if (( $#_comp_files )); then
-    compinit -i -C
+    compinit -i -C -d "${ZCOMP_CACHE}/.zcompdump"
 else
-    compinit -i
+    compinit -i -d "${ZCOMP_CACHE}/.zcompdump"
 fi
 unset _comp_files
 promptinit
