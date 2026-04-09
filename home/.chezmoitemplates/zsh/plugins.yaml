@@ -6,17 +6,8 @@ plugins:
     for:
       - url: Vifon/deer
         ice:
-          - autoload'deer' 
+          - autoload'deer'
           - atload"zle -N deer && bindkey '\ek' deer"
-      - url: MenkeTechnologies/zsh-learn
-        ice:
-          - nocompile
-      - url: MenkeTechnologies/zsh-git-acp
-        ice:
-          - nocompile
-      - url: MenkeTechnologies/zsh-sed-sub
-        ice:
-          - nocompile
       - url: kazhala/dotbare
       - url: reegnz/jq-zsh-plugin
       - url: caIamity/lacrimae.git
@@ -28,18 +19,6 @@ plugins:
       - url: changyuheng/fz
       - url: molovo/tipz
       - url: mattmc3/zman
-  - args:
-      - load
-    url: zdharma-continuum/zplugin-crasis
-    ice:
-      - lucid
-      - wait'[[ -n ${ZLAST_COMMANDS[(r)cras*]} ]]'
-  - args:
-      - wait
-      - lucid
-    for:
-      - url: zdharma-continuum/zui
-      - url: z-shell/zi-console
   - args:
       - as"completion"
       - pick"contrib/zsh_completion/_autorandr"
