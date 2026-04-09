@@ -18,3 +18,20 @@ export VISUAL={{ .editor }}
 if [[ -e "$HOME/.cargo/env" ]]; then
   . "$HOME/.cargo/env"
 fi
+
+# browser
+{{ if eq .chezmoi.os "linux" -}}
+  {{- if (.chezmoi.kernel.osrelease | lower | contains "wsl" ) -}}
+    {{- if lookPath "wslview" -}}
+export BROWSER=wslview
+    {{- else if lookPath "powershell.exe" -}}
+export BROWSER="powershell.exe -c Start-Process"
+    {{- else if lookPath "cmd.exe" -}}
+export BROWSER="cmd.exe /c start ''"
+    {{- else if lookPath "explorer.exe" -}}
+export BROWSER=explorer.exe
+    {{- end -}}
+  {{- else if lookPath "w3m" -}}
+export BROWSER=w3m
+  {{- end -}}
+{{- end -}}
