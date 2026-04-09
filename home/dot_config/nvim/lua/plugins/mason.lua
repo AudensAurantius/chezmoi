@@ -1,4 +1,22 @@
 return {
+  -- Override LazyVim dotnet extra: use Mono build of OmniSharp for .NET Framework 4.7.2
+  -- old-style csproj support, and disable heavy analyzers/completion
+  {
+    "neovim/nvim-lspconfig",
+    opts = {
+      servers = {
+        omnisharp = {
+          cmd = {
+            vim.fn.stdpath("data") .. "/mason/packages/omnisharp-mono/omnisharp-mono",
+            "--languageserver",
+          },
+          enable_roslyn_analyzers = false,
+          organize_imports_on_format = true,
+          enable_import_completion = false,
+        },
+      },
+    },
+  },
   {
     "mason-org/mason-lspconfig.nvim",
     opts = {
