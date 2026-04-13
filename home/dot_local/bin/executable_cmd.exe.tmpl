@@ -4,6 +4,6 @@
 # Wrapper around Microsoft cmd.exe
 # This makes it possible to call cmd.exe without adding /mnt/c/Windows/system32 to PATH
 
-/mnt/c/Windows/system32/cmd.exe "$@"
+exec /mnt/c/Windows/system32/cmd.exe "$@"
 {{- end }}
 {{- end }}

@@ -4,6 +4,6 @@
 # Wrapper around Microsoft powershell.exe
 # This makes it possible to call powershell.exe without adding /mnt/c/Windows/System32/WindowsPowerShell/v1.0 to PATH
 
-/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe "$@"
+exec /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe "$@"
 {{- end }}
 {{- end }}

@@ -4,6 +4,6 @@
 # Wrapper around Microsoft ipconfig.exe
 # This makes it possible to call ipconfig.exe without adding /mnt/c/Windows/system32 to PATH
 
-/mnt/c/Windows/System32/ipconfig.exe "$@"
+exec /mnt/c/Windows/System32/ipconfig.exe "$@"
 {{- end }}
 {{- end }}

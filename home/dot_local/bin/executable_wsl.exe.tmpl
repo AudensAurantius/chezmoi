@@ -4,6 +4,6 @@
 # Wrapper around Microsoft wsl.exe
 # This makes it possible to call wsl.exe without adding /mnt/c/Windows/system32 to PATH
 
-/mnt/c/Windows/System32/wsl.exe "$@"
+exec /mnt/c/Windows/System32/wsl.exe "$@"
 {{- end }}
 {{- end }}

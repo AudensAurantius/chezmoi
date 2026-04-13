@@ -5,6 +5,6 @@
 # This makes it possible to call where.exe without adding /mnt/c/Windows/system32 to PATH
 # Useful for finding the location of Windows executables
 
-/mnt/c/Windows/system32/where.exe "$@"
+exec /mnt/c/Windows/system32/where.exe "$@"
 {{- end }}
 {{- end }}

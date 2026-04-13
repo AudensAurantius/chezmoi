@@ -4,6 +4,6 @@
 # Wrapper around Microsoft's VS Code executable
 # This makes it possible to call `code` without adding /mnt/c/Users/mhaynes/AppData/Local/Programs/Microsoft VS Code/bin to PATH
 
-"/mnt/c/Users/mhaynes/AppData/Local/Programs/Microsoft VS Code/bin/code" "$@"
+exec "/mnt/c/Users/mhaynes/AppData/Local/Programs/Microsoft VS Code/bin/code" "$@"
 {{- end }}
 {{- end }}

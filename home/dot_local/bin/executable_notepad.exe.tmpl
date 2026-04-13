@@ -4,6 +4,6 @@
 # Wrapper around Microsoft notepad.exe
 # This makes it possible to call notepad.exe without adding /mnt/c/Windows/system32 to PATH
 
-/mnt/c/Windows/System32/notepad.exe "$@"
+exec /mnt/c/Windows/System32/notepad.exe "$@"
 {{- end }}
 {{- end }}

@@ -4,6 +4,6 @@
 # Wrapper around Microsoft clip.exe
 # This makes it possible to call clip.exe without adding /mnt/c/Windows/system32 to PATH
 
-/mnt/c/Windows/system32/clip.exe "$@"
+exec /mnt/c/Windows/system32/clip.exe "$@"
 {{- end }}
 {{- end }}
