@@ -1,0 +1,172 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl" ) -}}
+# configure-dual-vpn.ps1 -- Configure split routing for simultaneous BOCO
+# OpenVPN and GCI ZeroConnect tunnels.
+#
+# Called from dual-vpn (bash). Invoke via:
+#   powershell.exe -NoProfile -ExecutionPolicy Bypass `
+#       -File "$(wslpath -w ~/.local/PowerShell/configure-dual-vpn.ps1)" `
+#       -GciServerIp "10.66.109.41"
+
+param(
+    [string]$GciServerIp = "10.66.109.41",
+    [int]$TimeoutSeconds = 120
+)
+
+$ErrorActionPreference = "Stop"
+
+$openvpnExe  = "C:\Program Files\OpenVPN Connect\OpenVPNConnect.exe"
+$zeroconExe  = "C:\Program Files\Zero Networks\Connect\Zero Networks Connect.exe"
+$openvpnName = "Local Area Connection"   # TAP adapter name from Get-NetAdapter
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+function Write-Status($msg) { Write-Host "  $msg" }
+
+function Wait-ForCondition {
+    param([scriptblock]$Condition, [string]$Label, [int]$Timeout = $TimeoutSeconds)
+    $elapsed = 0
+    while ($elapsed -lt $Timeout) {
+        $result = & $Condition
+        if ($result) { return $result }
+        Start-Sleep -Seconds 3
+        $elapsed += 3
+        Write-Host "." -NoNewline
+    }
+    Write-Host ""
+    Write-Error "$Label did not complete within ${Timeout}s"
+    exit 1
+}
+
+# ---------------------------------------------------------------------------
+# Step 1: Launch VPN clients if not running
+# ---------------------------------------------------------------------------
+
+Write-Host ""
+Write-Host "[1/5] Checking VPN clients..."
+
+if (-not (Get-Process | Where-Object { $_.ProcessName -like "*OpenVPN*" })) {
+    Write-Status "Launching OpenVPN Connect..."
+    Start-Process $openvpnExe
+} else {
+    Write-Status "OpenVPN Connect is already running."
+}
+
+if (-not (Get-Process | Where-Object { $_.ProcessName -like "*Zero*Connect*" -or $_.ProcessName -like "*zero-connect*" })) {
+    Write-Status "Launching ZeroConnect..."
+    Start-Process $zeroconExe
+} else {
+    Write-Status "ZeroConnect is already running."
+}
+
+# ---------------------------------------------------------------------------
+# Step 2: Wait for OpenVPN adapter to have a gateway
+# ---------------------------------------------------------------------------
+
+Write-Host ""
+Write-Host "[2/5] Waiting for OpenVPN tunnel..."
+Write-Host "      (authenticate in OpenVPN Connect if prompted)"
+
+$ovpnConfig = Wait-ForCondition -Label "OpenVPN gateway" -Condition {
+    $cfg = Get-NetIPConfiguration -InterfaceAlias $openvpnName -ErrorAction SilentlyContinue
+    if ($cfg -and $cfg.IPv4DefaultGateway) { return $cfg }
+    return $null
+}
+
+$ovpnGw = $ovpnConfig.IPv4DefaultGateway.NextHop
+$ovpnIf = $ovpnConfig.InterfaceIndex
+Write-Host ""
+Write-Status "OpenVPN gateway: $ovpnGw (interface $ovpnIf)"
+
+# ---------------------------------------------------------------------------
+# Step 3: Wait for GCI server to be reachable (ZeroConnect tunnel is up)
+# ---------------------------------------------------------------------------
+
+Write-Host ""
+Write-Host "[3/5] Waiting for ZeroConnect tunnel..."
+Write-Host "      (authenticate in ZeroConnect if prompted)"
+
+Wait-ForCondition -Label "GCI server reachability" -Condition {
+    Test-Connection $GciServerIp -Count 1 -Quiet -ErrorAction SilentlyContinue
+} | Out-Null
+
+Write-Host ""
+Write-Status "GCI server ($GciServerIp) is reachable."
+
+# Discover ZeroConnect's gateway/interface for the GCI route
+$zcRoute = Find-NetRoute -RemoteIPAddress $GciServerIp -ErrorAction SilentlyContinue |
+    Where-Object { $_.InterfaceIndex -ne $ovpnIf } |
+    Select-Object -First 1
+
+if ($zcRoute) {
+    $zcGw = $zcRoute.NextHop
+    $zcIf = $zcRoute.InterfaceIndex
+    $zcAdapter = (Get-NetAdapter -InterfaceIndex $zcIf -ErrorAction SilentlyContinue).Name
+    Write-Status "ZeroConnect route: gateway $zcGw, interface $zcIf ($zcAdapter)"
+} else {
+    # Fallback: ZeroConnect may route via the same interface with on-link route
+    $zcRoute = Find-NetRoute -RemoteIPAddress $GciServerIp -ErrorAction Stop |
+        Select-Object -First 1
+    $zcGw = $zcRoute.NextHop
+    $zcIf = $zcRoute.InterfaceIndex
+    $zcAdapter = (Get-NetAdapter -InterfaceIndex $zcIf -ErrorAction SilentlyContinue).Name
+    Write-Status "ZeroConnect route (fallback): gateway $zcGw, interface $zcIf ($zcAdapter)"
+}
+
+# ---------------------------------------------------------------------------
+# Step 4: Configure split routing (requires elevation)
+# ---------------------------------------------------------------------------
+
+Write-Host ""
+Write-Host "[4/5] Configuring split routing (UAC prompt may appear)..."
+
+# Build route commands. Use interface index if gateway is on-link (0.0.0.0).
+if ($zcGw -eq "0.0.0.0") {
+    $gciRouteCmd = "route delete $GciServerIp >nul 2>&1 & route add $GciServerIp mask 255.255.255.255 0.0.0.0 IF $zcIf metric 1"
+} else {
+    $gciRouteCmd = "route delete $GciServerIp >nul 2>&1 & route add $GciServerIp mask 255.255.255.255 $zcGw metric 1"
+}
+$defaultRouteCmd = "route add 0.0.0.0 mask 0.0.0.0 $ovpnGw metric 1"
+$routeScript = "$gciRouteCmd & $defaultRouteCmd"
+
+$proc = Start-Process cmd.exe -Verb RunAs -ArgumentList "/c", $routeScript `
+    -PassThru -Wait -WindowStyle Hidden
+
+if ($proc.ExitCode -ne 0) {
+    Write-Warning "Route commands returned exit code $($proc.ExitCode). Check routing manually."
+}
+
+Write-Status "Routes configured:"
+Write-Status "  $GciServerIp/32 -> ZeroConnect (interface $zcIf)"
+Write-Status "  0.0.0.0/0      -> OpenVPN ($ovpnGw, metric 1)"
+
+# ---------------------------------------------------------------------------
+# Step 5: Verify
+# ---------------------------------------------------------------------------
+
+Write-Host ""
+Write-Host "[5/5] Verifying connectivity..."
+
+$gciOk = Test-Connection $GciServerIp -Count 1 -Quiet -ErrorAction SilentlyContinue
+if ($gciOk) {
+    Write-Status "GCI server ($GciServerIp): REACHABLE"
+} else {
+    Write-Warning "GCI server ($GciServerIp): UNREACHABLE -- check ZeroConnect"
+}
+
+# Test internet egress (Snowflake needs BOCO IP)
+$inetOk = Test-Connection "8.8.8.8" -Count 1 -Quiet -ErrorAction SilentlyContinue
+if ($inetOk) {
+    Write-Status "Internet (via OpenVPN): REACHABLE"
+} else {
+    Write-Warning "Internet: UNREACHABLE -- check OpenVPN default route"
+}
+
+Write-Host ""
+Write-Host "Done. Both tunnels should now be usable simultaneously."
+Write-Host "  RDP  -> $GciServerIp (via ZeroConnect)"
+Write-Host "  Snow -> *.snowflakecomputing.com (via BOCO OpenVPN)"
+{{- end }}
+{{- end }}

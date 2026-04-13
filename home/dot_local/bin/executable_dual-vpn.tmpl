@@ -1,0 +1,51 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl" ) -}}
+#!/usr/bin/env bash
+# dual-vpn -- Connect both BOCO OpenVPN and GCI ZeroConnect, then configure
+# split routing so both tunnels are usable simultaneously.
+#
+# Follows the sync-nfs pattern: bash wrapper in ~/.local/bin/ invokes a
+# PowerShell script in ~/.local/PowerShell/ for Windows-side work.
+#
+# Usage:
+#   dual-vpn              # launch clients, wait for auth, configure routes
+#   dual-vpn --routes     # skip client launch, just reconfigure routes
+#                           (useful if routes got reset but tunnels are still up)
+
+set -euo pipefail
+
+GCI_SERVER_IP="10.66.109.41"
+PS_SCRIPT="$HOME/.local/PowerShell/configure-dual-vpn.ps1"
+
+if [[ ! -f "$PS_SCRIPT" ]]; then
+  echo "ERROR: PowerShell script not found: $PS_SCRIPT" >&2
+  exit 1
+fi
+
+echo "=== Dual VPN Setup ==="
+echo ""
+
+# Display OTPs from pass if seeds are stored
+otp_shown=false
+for entry in boco/openvpn gci/zeroconnect; do
+  if pass show "$entry" >/dev/null 2>&1 && pass otp "$entry" >/dev/null 2>&1; then
+    label="${entry%%/*}"
+    label="$(echo "$label" | tr '[:lower:]' '[:upper:]')"
+    code="$(pass otp "$entry")"
+    echo "  $label OTP: $code"
+    otp_shown=true
+  fi
+done
+
+if [[ "$otp_shown" == "true" ]]; then
+  echo ""
+  echo "  (codes refresh every 30s -- re-run 'pass otp <entry>' if expired)"
+  echo ""
+fi
+
+# Forward all args to PowerShell
+powershell.exe -NoProfile -ExecutionPolicy Bypass \
+  -File "$(wslpath -w "$PS_SCRIPT")" \
+  -GciServerIp "$GCI_SERVER_IP"
+{{- end }}
+{{- end }}
