@@ -7,3 +7,8 @@
 - [ ] Figure out better way to sync /etc/ files
   - [ ] enumerate all relevant /etc/ files
 - [ ] Add `wslu` repo and package installation to run_onchange script
+- [ ] Refine firenvim setup
+  - [ ] resolve `noice` errors
+  - [ ] set ft depending on site
+  - [ ] configure site blacklist / whitelist
+- [ ] Bookmark / knowledge base extensions?
