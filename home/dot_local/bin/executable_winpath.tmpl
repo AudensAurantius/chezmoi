@@ -12,13 +12,29 @@
 # Separate flags from positional args. Once we see '--' or the first non-flag
 # argument, everything remaining is positional (standard POSIX convention).
 
+declare -A _winenv
+
+_load_winenv() {
+  [[ ${#_winenv[@]} -gt 0 ]] && return
+  while IFS='=' read -r key value; do
+    [[ -z "$key" || "$key" == '='* ]] && continue # skip hidden =C: vars
+    _winenv["${key^^}"]="$value" #always uppercase key
+  done < <(cmd.exe /C SET 2>/dev/null | tr -d '\r')
+}
+
 expand_windows_env_vars() {
-  local string="$1"
-  if command -v cmd.exe >/dev/null 2>&1; then
-    cmd.exe /C "echo $*" 2>/dev/null | tr -d '\r'
-  else
-    echo "$*"
+  local string="$*"
+  if ! command -v cmd.exe >/dev/null 2>&1 || [[ "$string" != *%*% ]]; then
+    echo "$string"
+    return
   fi
+  _load_winenv
+  while [[ "$string" =~ %([^%]+)% ]]; do
+    local key="${BASH_REMATCH[1]}"
+    local val="${_winenv[${key^^}]:-}"
+    string="${string/\%${key}\%/${val}}"
+  done
+  echo "$string"
 }
 
 declare -a flags=()
