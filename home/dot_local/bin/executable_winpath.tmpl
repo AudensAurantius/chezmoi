@@ -1,0 +1,52 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl" ) -}}
+#!/usr/bin/env bash
+# winpath -- wslpath wrapper that reads paths from stdin when no path
+# argument is given. Passes all flags through to wslpath.
+#
+# Usage:
+#   echo 'C:\Users\mhaynes' | winpath -u
+#   cmd.exe /C 'echo %APPDATA%' 2>/dev/null | tr -d '\r' | winpath -u
+#   winpath -u 'C:\Users\mhaynes'   # passthrough: behaves like wslpath
+
+# Separate flags from positional args. Once we see '--' or the first non-flag
+# argument, everything remaining is positional (standard POSIX convention).
+
+expand_windows_env_vars() {
+  local string="$1"
+  if command -v cmd.exe >/dev/null 2>&1; then
+    cmd.exe /C "echo $*" 2>/dev/null | tr -d '\r'
+  else
+    echo "$*"
+  fi
+}
+
+declare -a flags=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --)
+    shift
+    break
+    ;;
+  -*) flags+=("$1") ;;
+  *) break ;;
+  esac
+  shift
+done
+path="$*"
+
+if [[ -n "$path" ]]; then
+  # Path given as argument -- passthrough to wslpath
+  exec wslpath "${flags[@]}" -- "$(expand_windows_env_vars "$path")"
+fi
+
+# No path arguments -- read from stdin, one path per line
+while IFS= read -r line; do
+  if [[ -z "$line" ]]; then
+    echo ""
+  else
+    wslpath "${flags[@]}" -- "$(expand_windows_env_vars "$line")"
+  fi
+done
+{{- end }}
+{{- end }}
