@@ -24,7 +24,7 @@ _load_winenv() {
 
 expand_windows_env_vars() {
   local string="$*"
-  if ! command -v cmd.exe >/dev/null 2>&1 || [[ "$string" != *%*% ]]; then
+  if ! command -v cmd.exe >/dev/null 2>&1 || [[ ! "$string" =~ %([^%]+)%  ]]; then
     echo "$string"
     return
   fi
