@@ -1,0 +1,3 @@
+{{ if stat (joinPath .chezmoi.homeDir ".bun" "_bun" ) -}}
+{{ include (joinPath .chezmoi.homeDir ".bun" "_bun" ) }}
+{{- end }}
