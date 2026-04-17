@@ -35,3 +35,9 @@ export BROWSER=explorer.exe
 export BROWSER=w3m
   {{- end -}}
 {{- end -}}
+
+# bun
+if [[ -x "$HOME/.bun/bin/bun" ]]; then
+  export BUN_INSTALL="$HOME/.bun"
+  export PATH="$BUN_INSTALL/bin:$PATH"
+fi
