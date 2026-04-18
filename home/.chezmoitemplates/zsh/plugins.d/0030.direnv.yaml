@@ -8,3 +8,6 @@ plugins:
       - src"zhook.zsh"
     for:
       - url: direnv/direnv
+        export:
+          name: DIRENV_WARN_TIMEOUT
+          value: 60s
