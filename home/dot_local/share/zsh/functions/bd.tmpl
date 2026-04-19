@@ -1,0 +1,9 @@
+{{ if lookPath "bd" -}}
+  {{- if lookPath "bd-timew" -}}
+#!/bin/zsh -f
+case "$1" in
+  start|stop) bd-timew "$@" ;;
+  *) command bd "$@" ;;
+esac
+  {{- end -}}
+{{- end }}

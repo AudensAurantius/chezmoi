@@ -1,0 +1,185 @@
+{{ if lookPath "bd" -}}
+#!/usr/bin/env python3
+"""bd-timew: bridge between Beads issues and Timewarrior intervals.
+
+Reads a per-DB sidecar config (.beads/bd-timew.yaml), resolves a Beads
+issue's labels to a NetSuite (client, case, svc) tuple, and starts/stops
+a Timewarrior interval tagged accordingly. Also claims the issue in Beads
+on start.
+
+Resolution order (first wins, merged onto default):
+  1. Per-issue `case:<string>` label (escape hatch)
+  2. First matching rule in `patterns:` (regex on space-joined label list)
+  3. `default:` block in the sidecar
+  4. Hardcoded global (svc = "Technology Services")
+
+Usage:
+  bd-timew start <issue-id>   # claim + timew start, tagged with resolved tuple
+  bd-timew stop               # timew stop (no status change in Beads)
+  bd-timew resolve <issue-id> # dry-run: print the resolved tuple only
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+GLOBAL_SVC_DEFAULT = "Technology Services"
+
+
+def run(cmd: list[str], *, check: bool = True, capture: bool = False):
+    """Thin subprocess wrapper."""
+    return subprocess.run(
+        cmd, check=check, text=True,
+        capture_output=capture,
+    )
+
+
+def find_beads_dir() -> Path:
+    """Use `bd where` to locate the active beads workspace."""
+    result = run(["bd", "where"], check=False, capture=True)
+    if result.returncode != 0:
+        sys.exit(
+            "bd-timew: no active beads workspace. cd into a project with a "
+            ".beads/ directory, or set BEADS_DIR."
+        )
+    first_line = result.stdout.strip().split("\n", 1)[0].strip()
+    return Path(first_line)
+
+
+def load_sidecar(beads_dir: Path) -> dict:
+    path = beads_dir / "bd-timew.yaml"
+    if not path.exists():
+        print(
+            f"bd-timew: warning: no sidecar at {path}; using minimal defaults.",
+            file=sys.stderr,
+        )
+        return {"default": {}, "patterns": []}
+    with path.open() as f:
+        data = yaml.safe_load(f) or {}
+    data.setdefault("default", {})
+    data.setdefault("patterns", [])
+    return data
+
+
+def get_issue(issue_id: str) -> dict:
+    result = run(
+        ["bd", "show", issue_id, "--json"], check=False, capture=True
+    )
+    if result.returncode != 0:
+        sys.exit(f"bd-timew: `bd show {issue_id}` failed:\n{result.stderr}")
+    data = json.loads(result.stdout)
+    if isinstance(data, list):
+        if not data:
+            sys.exit(f"bd-timew: issue {issue_id} not found")
+        return data[0]
+    return data
+
+
+def resolve_tuple(labels: list[str], sidecar: dict) -> dict:
+    default = dict(sidecar.get("default") or {})
+    tuple_ = {
+        "client": default.get("client"),
+        "case": default.get("case"),
+        "svc": default.get("svc") or GLOBAL_SVC_DEFAULT,
+    }
+
+    label_str = " ".join(labels)
+    for rule in sidecar.get("patterns") or []:
+        pattern = rule.get("match")
+        if not pattern:
+            continue
+        m = re.search(pattern, label_str)
+        if m:
+            groups = m.groupdict()
+            for key in ("client", "case", "svc"):
+                if key in rule:
+                    val = rule[key]
+                    if groups and isinstance(val, str):
+                        val = val.format(**groups)
+                    tuple_[key] = val
+            break
+
+    # Escape hatch: per-issue `case:` label overrides pattern-derived case.
+    for label in labels:
+        if label.startswith("case:"):
+            tuple_["case"] = label[len("case:"):]
+            break
+
+    return tuple_
+
+
+def print_resolution(issue: dict, labels: list[str], tuple_: dict) -> None:
+    issue_id = issue.get("id", "?")
+    title = issue.get("title", "")
+    print(f"Issue:  {issue_id}  {title}")
+    print(f"Labels: {', '.join(labels) or '(none)'}")
+    print(f"Client: {tuple_['client'] or '(none)'}")
+    print(f"Case:   {tuple_['case'] or '(none)'}")
+    print(f"Svc:    {tuple_['svc'] or '(none)'}")
+
+
+def cmd_start(issue_id: str, dry_run: bool = False) -> None:
+    beads_dir = find_beads_dir()
+    sidecar = load_sidecar(beads_dir)
+    issue = get_issue(issue_id)
+    labels = issue.get("labels") or []
+    tuple_ = resolve_tuple(labels, sidecar)
+
+    print_resolution(issue, labels, tuple_)
+
+    if dry_run:
+        return
+
+    tags = [issue_id]
+    for key in ("client", "case", "svc"):
+        val = tuple_[key]
+        if val:
+            tags.append(f"{key}:{val}")
+    if tuple_["svc"] == "none":
+        tags.append("billable:false")
+
+    run(["timew", "start", *tags])
+    title = issue.get("title", "")
+    if title:
+        run(["timew", "annotate", f"{issue_id}: {title}"])
+
+    if issue.get("status") != "in_progress":
+        run(["bd", "update", issue_id, "--claim"], check=False)
+
+
+def cmd_stop() -> None:
+    run(["timew", "stop"], check=False)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="bd-timew")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_start = sub.add_parser("start", help="start Timewarrior + claim issue")
+    p_start.add_argument("issue_id")
+
+    sub.add_parser("stop", help="stop current Timewarrior interval")
+
+    p_resolve = sub.add_parser(
+        "resolve", help="print resolved billing tuple without starting timew"
+    )
+    p_resolve.add_argument("issue_id")
+
+    args = parser.parse_args()
+    if args.cmd == "start":
+        cmd_start(args.issue_id)
+    elif args.cmd == "stop":
+        cmd_stop()
+    elif args.cmd == "resolve":
+        cmd_start(args.issue_id, dry_run=True)
+
+
+if __name__ == "__main__":
+    main()
+{{- end }}
