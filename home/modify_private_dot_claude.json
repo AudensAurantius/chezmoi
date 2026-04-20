@@ -1,0 +1,30 @@
+#!/bin/sh
+# chezmoi modify_ script: surgically set editorMode in ~/.claude.json.
+# Rest of the file (projects, usage counters, oauthAccount, etc.) is left
+# untouched — chezmoi does not own or snapshot the full file contents.
+#
+# Guards (runtime, not template-time):
+#   1. jq must be on PATH and executable; if missing, pass stdin through
+#      unchanged so chezmoi does not clobber the target.
+#   2. Target file must already exist with valid JSON content; if stdin is
+#      empty (chezmoi's behavior for nonexistent targets is undocumented, so
+#      we handle both possibilities), pass through unchanged.
+
+set -eu
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "modify_dot_claude.json: jq not on PATH; leaving ~/.claude.json unchanged" >&2
+  exec cat
+fi
+
+input="$(cat)"
+
+if [ -z "$input" ]; then
+  # Empty stdin → target file does not exist (or is empty). Emit nothing so
+  # chezmoi does not create a stub that Claude Code might later overwrite
+  # without merging. Claude Code will create ~/.claude.json itself; on the
+  # next `chezmoi apply` this script will see real content and set the key.
+  exit 0
+fi
+
+printf '%s' "$input" | jq '.editorMode = "vim"'
