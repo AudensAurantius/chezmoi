@@ -30,7 +30,10 @@ fi
 
 # Idempotency guard. `run_onchange_` already skips when the rendered script
 # is unchanged; this covers manual re-runs when the binary is already current.
-if [ -x "$INSTALL_PATH" ] && "$INSTALL_PATH" version 2>/dev/null | grep -qF "$VERSION"; then
+# Compared by SHA256 rather than `dstask version` because upstream v1.0.1 was
+# built without ldflags and reports "Unknown" for its version.
+if [ -x "$INSTALL_PATH" ] \
+    && [ "$(sha256sum "$INSTALL_PATH" 2>/dev/null | awk '{print $1}')" = "$EXPECTED_SHA" ]; then
   echo "dstask installer: $VERSION already installed at $INSTALL_PATH" >&2
   exit 0
 fi
