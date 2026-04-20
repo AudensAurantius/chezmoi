@@ -1,0 +1,28 @@
+{{- /* Re-run whenever any file under dot_config/systemd/user/ changes.
+     The hash-comments block below forces chezmoi to re-invoke this script
+     when the source content changes; otherwise `run_onchange_` is a no-op. */ -}}
+#!/usr/bin/env bash
+# systemd --user units reload: regenerate daemon state and (re-)enable the
+# timers we manage here. Idempotent — safe to run on every change.
+#
+{{ range (glob (joinPath .chezmoi.sourceDir "dot_config/systemd/user/*")) -}}
+# hash: {{ . }}: {{ include . | sha256sum }}
+{{ end }}
+set -euo pipefail
+
+if ! command -v systemctl >/dev/null 2>&1; then
+    echo "systemd-user-reload: systemctl not found; skipping" >&2
+    exit 0
+fi
+
+systemctl --user daemon-reload
+
+# Enable + start every timer unit present in ~/.config/systemd/user/. Service
+# units are not enabled directly — their corresponding timers invoke them.
+shopt -s nullglob
+for timer in "$HOME/.config/systemd/user/"*.timer; do
+    name="$(basename "$timer")"
+    systemctl --user enable --now "$name"
+done
+
+echo "systemd-user-reload: daemon reloaded; timers enabled."

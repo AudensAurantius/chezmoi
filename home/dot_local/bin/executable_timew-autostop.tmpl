@@ -1,0 +1,19 @@
+{{ if lookPath "timew" -}}
+#!/usr/bin/env bash
+# timew-autostop: end-of-day safety net. Stops any running Timewarrior
+# interval and raises a desktop notification if one was active. Idempotent
+# — a no-op if no interval is tracking.
+#
+# Invoked by timew-autostop.service (systemd user unit), triggered by
+# timew-autostop.timer. Default schedule: 23:59 daily.
+
+set -euo pipefail
+
+if timew | head -1 | grep -q '^Tracking'; then
+    tags="$(timew | head -1 | sed 's/^Tracking //')"
+    timew stop
+    if command -v {{ .notifier }} >/dev/null 2>&1; then
+        {{ .notifier }} "timew auto-stop" "stopped interval at $(date +%H:%M): ${tags}"
+    fi
+fi
+{{- end }}

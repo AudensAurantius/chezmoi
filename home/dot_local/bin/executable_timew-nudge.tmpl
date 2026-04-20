@@ -1,0 +1,18 @@
+{{ if lookPath "timew" -}}
+#!/usr/bin/env bash
+# timew-nudge: pre-bedtime reminder. If a Timewarrior interval is running,
+# raise a desktop notification so the user can decide whether to stop or
+# keep tracking. Silent if nothing is tracking.
+#
+# Invoked by timew-nudge.service (systemd user unit), triggered by
+# timew-nudge.timer. Default schedule: 22:30 daily.
+
+set -euo pipefail
+
+if timew | head -1 | grep -q '^Tracking'; then
+    tags="$(timew | head -1 | sed 's/^Tracking //')"
+    if command -v {{ .notifier }} >/dev/null 2>&1; then
+        {{ .notifier }} "timew still tracking" "running: ${tags} — bd-timew stop if you're done"
+    fi
+fi
+{{- end }}

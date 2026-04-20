@@ -22,6 +22,10 @@ data:
   {{- else -}}
     "notify-send"
   {{- end }}
+  # Hosts with systemd-user lingering enabled (loginctl enable-linger).
+  # Lingering lets user timers fire even when no login session is active —
+  # useful for daily housekeeping timers like timew-autostop.
+  enable_systemd_session_services: {{ has .chezmoi.hostname (list "voidmobile" "Blade16-MHaynes") }}
   {{- if eq .chezmoi.hostname "Blade16-MHaynes" }}
   email: "mhaynes@boldorange.com"
   gpg:
@@ -41,5 +45,4 @@ data:
   editor: {{ if lookPath "nvim" -}}nvim
     {{- else if lookPath "vim" }}vim
     {{- else }}vi{{ end }}
-  enable_systemd_session_services: {{ eq .chezmoi.hostname "voidmobile" }}
   {{- end }}
