@@ -1,0 +1,24 @@
+# Pinned the-way release, consumed by run_onchange_install-the-way.sh.tmpl.
+#
+# the-way (https://github.com/out-of-cheese-error/the-way) publishes one
+# tarball per OS with no architecture split — `the-way-linux.tar.gz` and
+# `the-way-macos.tar.gz`, both amd64-only as of v0.20.3. No ARM assets.
+# Keys in `checksums` match the upstream filename suffix (linux / macos),
+# not chezmoi's .chezmoi.os value (linux / darwin); the template maps
+# darwin → macos at render time.
+#
+# To bump:
+#   1. version:   new upstream tag, "v"-prefixed (e.g., "v0.20.3")
+#   2. checksums: verbatim from
+#      https://github.com/out-of-cheese-error/the-way/releases/download/<version>/the-way-<os>.sha256
+#      (upstream publishes one .sha256 file per OS, not a combined file)
+#   3. commit — rendered script hash changes, triggering chezmoi re-run.
+
+# Note: top-level key is "theWay" (camelCase), not "the-way" — hyphens in
+# chezmoidata keys break Go template dot-access (`.the-way.version` parses
+# as subtraction).
+theWay:
+  version: "v0.20.3"
+  checksums:
+    linux: "054c2f6f5caedfe6a49500f01df6deb5174f02d7b8fef9d98e642ba3d391eb69"
+    macos: "2699aaccbf9fc1da9b7208525415bb6e759cc966093747489495a693ac9685c7"

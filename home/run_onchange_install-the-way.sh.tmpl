@@ -1,0 +1,64 @@
+#!/bin/sh
+# run_onchange_install-the-way.sh.tmpl — install the-way to ~/.local/bin.
+#
+# Pinned version + per-OS tarball SHA256 in .chezmoidata/the-way.yaml.
+# Upstream does not publish ARM binaries as of v0.20.3 — linux_arm64 /
+# darwin_arm64 fall through the no-pinned-checksum guard and skip with a
+# note. Install those platforms via `cargo install the-way` instead.
+{{- $v := .theWay.version -}}
+{{- $osKey := .chezmoi.os -}}
+{{- if eq $osKey "darwin" -}}{{- $osKey = "macos" -}}{{- end -}}
+{{- $assetName := printf "the-way-%s.tar.gz" $osKey -}}
+{{- $sha := dig $osKey "" .theWay.checksums -}}
+{{- $assetURL := printf "https://github.com/out-of-cheese-error/the-way/releases/download/%s/%s" $v $assetName }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+ASSET_NAME={{ $assetName | quote }}
+ASSET_URL={{ $assetURL | quote }}
+EXPECTED_SHA={{ $sha | quote }}
+INSTALL_PATH={{ joinPath .chezmoi.homeDir ".local" "bin" "the-way" | quote }}
+
+if [ -z "$EXPECTED_SHA" ]; then
+  # No checksum pinned for this OS. Upstream ships linux + macos tarballs
+  # only (both amd64); ARM platforms should fall back to `cargo install`.
+  echo "the-way installer: no pinned checksum for $ASSET_NAME; skipping" >&2
+  exit 0
+fi
+
+# Idempotency guard — probe installed binary's version string.
+# `the-way --version` prints "the-way <version>" (no v-prefix) in v0.20.3.
+if [ -x "$INSTALL_PATH" ] \
+    && "$INSTALL_PATH" --version 2>/dev/null | grep -qF "${VERSION#v}"; then
+  echo "the-way installer: $VERSION already installed at $INSTALL_PATH" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$INSTALL_PATH")"
+
+tmp_tar=$(mktemp)
+tmp_dir=$(mktemp -d)
+trap 'rm -rf "$tmp_tar" "$tmp_dir"' EXIT
+
+echo "the-way installer: downloading $ASSET_URL" >&2
+curl -fsSL -o "$tmp_tar" "$ASSET_URL"
+
+actual=$(sha256sum "$tmp_tar" | awk '{print $1}')
+if [ "$EXPECTED_SHA" != "$actual" ]; then
+  echo "the-way installer: checksum mismatch for $ASSET_NAME" >&2
+  echo "  expected: $EXPECTED_SHA" >&2
+  echo "  actual:   $actual" >&2
+  exit 1
+fi
+
+tar -xzf "$tmp_tar" -C "$tmp_dir"
+binary=$(find "$tmp_dir" -type f -name the-way | head -1)
+if [ -z "$binary" ]; then
+  echo "the-way installer: no 'the-way' binary in $ASSET_NAME" >&2
+  exit 1
+fi
+
+chmod u+x "$binary"
+mv "$binary" "$INSTALL_PATH"
+echo "the-way installer: $VERSION installed to $INSTALL_PATH" >&2
