@@ -1,3 +1,20 @@
+---
+name: stop
+description: Stop the current Timewarrior interval without changing any bead's status
+author: Michael Haynes
+scope: global
+tags: [time-tracking, timewarrior]
+timestamps:
+  - action: created
+    at: 2026-04-20T00:35:06-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: J121-9kp.1 Wave 1 time-tracking bundle (2026-04-20). Companion to /start, /switch, /status."
+  - "Motivation: breaks, end-of-day, context-switching to non-bead work all need a clean timer stop. Independent of bead status so that in-progress beads stay in-progress when the user steps away."
+  - "Projected use: invoke at breaks, end of session, or when switching to untracked work. Does NOT close the bead — use bd close explicitly when work is complete."
+related: [/start, /switch, /status, /time-report]
+---
+
 # /stop — Stop the current Timewarrior interval
 
 Thin wrapper over `bd-timew stop`. Ends the active interval without changing any bead's status in Beads.

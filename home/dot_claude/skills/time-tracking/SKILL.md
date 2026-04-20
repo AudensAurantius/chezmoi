@@ -1,6 +1,17 @@
 ---
 name: time-tracking
 description: Beads + Timewarrior time-tracking ritual via bd-timew. Use when claiming a bead to work on, switching focus between beads, stopping work for a break, or checking what's currently being tracked. Covers the /start, /stop, /switch, and /status slash commands that wrap the bd-timew bridge script.
+author: Michael Haynes
+scope: global
+tags: [time-tracking, beads, timewarrior, billing]
+timestamps:
+  - action: created
+    at: 2026-04-20T00:35:06-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: J121-9kp.1 Wave 1 time-tracking bundle (2026-04-20). Companion to the /start, /stop, /switch, /status slash commands and the bd-timew bridge script at ~/.local/bin/bd-timew."
+  - "Motivation: the time-tracking ritual (claim bead → start timer with correct tuple → stop at break → generate report) was unwritten and error-prone. Codifying it as a skill with TRIGGER language ensures Claude invokes it autonomously when the ritual is in scope."
+  - "Projected use: fires when the user invokes any /start, /stop, /switch, /status command or references Timewarrior / bd-timew. Tuple-resolution rules (Option A sidecar at .beads/bd-timew.yaml) documented in auto-memory feedback-time-tracking.md."
 ---
 
 # Time Tracking

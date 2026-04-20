@@ -1,4 +1,23 @@
-# Time Report Skill
+---
+name: time-report
+description: Generate a monthly unified timeline report from Outlook calendar, Teams chat, and Timewarrior intervals
+author: Michael Haynes
+scope: global
+tags: [time-tracking, reporting, outlook, teams, timewarrior]
+timestamps:
+  - action: created
+    at: 2026-04-19T20:26:10-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: pre-bd-era tooling for monthly time reporting (2026-04-19). Predates the bd-timew bridge script and Wave 1 time-tracking bundle."
+  - "Motivation: monthly billing / engagement reporting needed a unified view across calendar events, Teams conversations, and explicit timer intervals."
+  - "Projected use: invoke at end-of-month to generate the timeline report for engagement billing. H1 historically read 'Time Report Skill' — a misnomer, since this is a command, not a skill. Corrected to /time-report at retrofit time."
+related: [/start, /stop, /switch, /status]
+---
+
+# /time-report — Generate a monthly unified timeline report
+
+Generate a monthly unified timeline report from Outlook calendar and Teams chat
 
 Generate a monthly unified timeline report from Outlook calendar and Teams chat
 data, using the Microsoft 365 MCP tools. Replaces the manual CSV export +

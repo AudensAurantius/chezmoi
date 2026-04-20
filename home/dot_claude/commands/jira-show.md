@@ -1,3 +1,20 @@
+---
+name: jira-show
+description: Fetch a Jira ticket + recent comments and present a context briefing with local-mirror pointers
+author: Michael Haynes
+scope: global
+tags: [jira, mcp, atlassian, read-only]
+timestamps:
+  - action: created
+    at: 2026-04-20T03:52:31-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: J121-9kp.2.2 Jira workflow bundle (2026-04-20). Paired with /jira-create."
+  - "Motivation: picking up inherited, stale, or handoff work needed a one-shot brief that went beyond 'bd show' — status, assignee, priority, description, recent comments, and pointers into the local tasks/<KEY>/ mirror."
+  - "Projected use: invoke when returning to unfamiliar work, responding to a Jira mention, or before posting an update. Read-only; never mutates Jira. Comment bodies arrive as ADF despite responseContentFormat=markdown (known MCP quirk)."
+related: [/jira-create, /draft-comment, /post-comment, "jira-conventions skill"]
+---
+
 # /jira-show — Context briefing for an existing Jira ticket
 
 Fetch a Jira ticket and its recent comments, then present a briefing — status, assignee, priority, description, recent activity, local mirror pointers. Useful when picking up inherited or stale work.

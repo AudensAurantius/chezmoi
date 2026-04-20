@@ -1,6 +1,17 @@
 ---
 name: jira-conventions
 description: Drafting and posting Jira comments in ADF with resolved @-mentions. TRIGGER when drafting, composing, editing, or posting a Jira comment; when constructing ADF payloads for `addCommentToJiraIssue`; when the user writes `@{Display Name}` in a draft destined for Jira; when touching files under `tasks/<ticket>/comments/`. Codifies: ADF-always posting format, `@{Display Name}` draft syntax, draft frontmatter (posted, comment_id, target_status, contentFormat: adf), analysis-vs-status-update style distinction. Canonical references: `~/.claude/references/jira-*.md`.
+author: Michael Haynes
+scope: global
+tags: [jira, comments, adf, atlassian, mcp]
+timestamps:
+  - action: created
+    at: 2026-04-20T03:31:18-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: J121-9kp.1.4 Jira integration bundle (2026-04-20). Paired with the jira-comment-drafter agent, /draft-comment and /post-comment slash commands."
+  - "Motivation: Jira comments with mentions, nested bullets, or ADO links break in subtle ways when posted as markdown (v2 endpoint conversion). The only reliable path is ADF via MCP. Without a skill encoding this rule, Claude defaults to jira-cli and corrupts the comment. Verified against BOCO-18250."
+  - "Projected use: fires on any Jira comment authoring/posting flow. Forces contentFormat=adf, resolves @{Display Name} against the engagement's account-ID table, distinguishes analysis vs. status-update structural norms. Pointers to four reference docs under ~/.claude/references/."
 ---
 
 # Jira Comment Conventions

@@ -1,3 +1,20 @@
+---
+name: draft-comment
+description: Draft a Jira comment via the jira-comment-drafter subagent, isolating ticket-history context
+author: Michael Haynes
+scope: global
+tags: [jira, comments, subagent, adf]
+timestamps:
+  - action: created
+    at: 2026-04-20T03:31:46-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: J121-9kp.1.4 Jira integration bundle (2026-04-20). Paired with /post-comment and the jira-comment-drafter subagent."
+  - "Motivation: drafting Jira comments with correct ADF formatting, @-mention resolution, and engagement-specific style rules needs enough context that inlining it in the main conversation fills the working context with Jira ticket history. Subagent isolation solves this."
+  - "Projected use: invoke when composing a Jira comment. Optional guidance argument steers tone/focus. Produces a draft file in tasks/<ticket>/comments/ with YAML frontmatter tracking post state."
+related: [/post-comment, /jira-create, /jira-show, "jira-conventions skill", "jira-comment-drafter agent"]
+---
+
 # /draft-comment — Draft a Jira comment via the jira-comment-drafter subagent
 
 Delegate the drafting of a Jira comment to the `jira-comment-drafter` subagent. Isolates ticket-history reads and drafting context from the main conversation.

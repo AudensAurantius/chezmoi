@@ -1,6 +1,17 @@
 ---
 name: python-scripting
 description: User-specific conventions for Python utility and automation scripts. TRIGGER when creating a new `.py` file, editing an existing Python script, or scaffolding any Python entrypoint (argparse, logging, config, credentials, subprocess wrappers). Codifies `logging` over `print`, argparse with custom `HelpFormatter` + `--loglevel`, `ruff` formatting and linting, credentials from config/env (never constants), library-native config APIs (e.g., `snowflake` connector's `connection_name=`), purpose-built libraries over regex (`sqlglot` for SQL, `BeautifulSoup` for HTML), virtualenv development, Justfile recipe integration, and credential export via `.envrc` from a `pass` store. Canonical exemplars: `~/.local/bin/bd-timew` and `snowflake_migrations/scripts/get_snowflake_procs.py`. Canonical convention list: Beads issue J121-91l.
+author: Michael Haynes
+scope: global
+tags: [python, scripting, conventions, tooling]
+timestamps:
+  - action: created
+    at: 2026-04-20T02:26:45-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: patterns codified retroactively from existing scripts (bd-timew bridge, get_snowflake_procs.py, parse-nessus-was.py). Canonical convention list tracked in Beads as J121-91l."
+  - "Motivation: without the skill, each new Python script rediscovered the same choices (logging vs print, argparse formatting, credential source, library preference). Codifying them into a skill ensures consistency across the ecosystem and lets new scripts inherit conventions automatically."
+  - "Projected use: fires whenever a Python file is created or edited. Particularly load-bearing for scripts that touch credentials (Snowflake, Jira) or subprocess wrappers — the convention insists on pass-backed .envrc patterns and library-native config APIs rather than hand-rolled regex."
 ---
 
 # Python Scripting Conventions

@@ -1,3 +1,20 @@
+---
+name: switch
+description: Switch Timewarrior tracking to a different bead in a single operation
+author: Michael Haynes
+scope: global
+tags: [time-tracking, beads, timewarrior]
+timestamps:
+  - action: created
+    at: 2026-04-20T00:35:06-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: J121-9kp.1 Wave 1 time-tracking bundle (2026-04-20). Companion to /start, /stop, /status."
+  - "Motivation: stopping the current interval and starting a new one were two commands with a window for forgetting the second step. /switch fuses the pair."
+  - "Projected use: invoke when pivoting focus from one bead to another within the same session. Common pattern: /start epic → triage → /switch to chosen child bead when implementation begins."
+related: [/start, /stop, /status, /time-report]
+---
+
 # /switch — Switch Timewarrior tracking to a different bead
 
 Stop the current interval and immediately start a new one on another bead. Thin wrapper over `bd-timew switch`.

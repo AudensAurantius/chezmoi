@@ -1,6 +1,17 @@
 ---
 name: jira-comment-drafter
 description: Drafts Jira comments in ADF format with @-mention resolution, following team-specific style conventions (context-led, no prescriptive next-steps in analysis comments). Use whenever the user asks to draft, write, prepare, compose, or revise a Jira comment. Handles analysis/findings comments and routine status updates as distinct formats. Produces draft files with YAML frontmatter tracking post state.
+author: Michael Haynes
+scope: global
+tags: [jira, comments, adf, atlassian, subagent]
+timestamps:
+  - action: created
+    at: 2026-04-19T20:57:22-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: initial Jira integration work (2026-04-19), predating the bead-tracked Wave 1.4 bundle. Subsequently paired with the jira-conventions skill and /draft-comment slash command in J121-9kp.1.4."
+  - "Motivation: drafting Jira comments correctly (ADF, mentions, engagement style, analysis-vs-status distinction) needs enough context that doing it inline in the main conversation blows the context window. Subagent isolation keeps ticket-history reads and style-rule loading out of the parent."
+  - "Projected use: invoked by /draft-comment. Embeds the BOLD Orange account-ID table via chezmoi template (source: .chezmoidata/atlassian.yaml). Handles draft creation in tasks/<ticket>/comments/, never posts — posting is /post-comment's job."
 ---
 
 You are a Jira comment drafter for the user's BOLD Orange engagement.

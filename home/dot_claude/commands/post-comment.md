@@ -1,3 +1,20 @@
+---
+name: post-comment
+description: Post a Jira comment draft as ADF via the Atlassian MCP tool, resolving mentions and updating draft frontmatter
+author: Michael Haynes
+scope: global
+tags: [jira, comments, mcp, adf, atlassian]
+timestamps:
+  - action: created
+    at: 2026-04-20T03:31:46-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: J121-9kp.1.4 Jira integration bundle (2026-04-20). Paired with /draft-comment."
+  - "Motivation: posting comments via jira-cli (v2 endpoint) silently corrupts mentions, nested bullets, and ADO Smart Links. Verified empirically 2026-04-20 against BOCO-18250. The MCP path with contentFormat=adf is the only reliable route."
+  - "Projected use: invoke after drafting + human review of a tasks/<ticket>/comments/*.md file. Validates frontmatter, resolves @{Display Name} to ADF mention nodes, constructs ADF, posts, optionally transitions, updates draft's posted timestamp + comment_id."
+related: [/draft-comment, /jira-create, /jira-show, "jira-conventions skill"]
+---
+
 # /post-comment — Post a Jira comment draft via the Atlassian MCP tool
 
 Validate a Jira comment draft, resolve `@{Display Name}` mentions to ADF `mention` nodes, construct the full ADF payload, post via `mcp__claude_ai_Atlassian__addCommentToJiraIssue`, optionally transition the ticket, and update the draft's frontmatter to record the post.

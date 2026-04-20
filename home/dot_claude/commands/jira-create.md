@@ -1,3 +1,20 @@
+---
+name: jira-create
+description: Create a Jira issue, mirror to Beads with src:jira + URL external_ref, and scaffold a task working directory
+author: Michael Haynes
+scope: global
+tags: [jira, beads, mcp, atlassian, task-directory]
+timestamps:
+  - action: created
+    at: 2026-04-20T03:52:31-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: J121-9kp.2.2 Jira workflow bundle (2026-04-20). Paired with /jira-show."
+  - "Motivation: creating a Jira issue, mirroring it to Beads, and creating a tasks/<KEY>/ working directory were three independent rituals that were easy to half-complete. Partial state is worse than no state — this command atomizes the trio, with explicit invariant that no Beads issue is created if Jira creation fails."
+  - "Projected use: invoke when starting new Jira-tracked work. Jira-type maps to Beads type (Task→task, Bug→bug, Story→feature, Epic→epic). Priority maps P0..P4 ↔ Highest..Lowest. --client required for BOCO (customfield_10072)."
+related: [/jira-show, /draft-comment, /post-comment, /task-init, "jira-conventions skill"]
+---
+
 # /jira-create — Create a Jira issue, mirror to Beads, and scaffold a task dir
 
 Create a Jira issue via the Atlassian MCP tool, mirror it as a Beads issue with `src:jira` + URL-formatted `external_ref` (indistinguishable from a `bd jira sync --pull` result), and scaffold the `tasks/<JIRA-KEY>/` working directory. All three artifacts are linked before the command returns.

@@ -1,6 +1,17 @@
 ---
 name: systematic-debugging
 description: Four-phase methodology for debugging bugs, test failures, and unexpected behavior. Investigate root cause before proposing any fix; escalate to architectural discussion after 3+ failed fix attempts. Use for any non-trivial bug, especially under time pressure.
+author: Michael Haynes
+scope: global
+tags: [debugging, methodology, escalation]
+timestamps:
+  - action: created
+    at: 2026-04-20T01:20:51-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: methodology refined from repeated J121 debugging sessions (SQL injection characterization, CSP nonce investigation, Terraform privilege-gap analysis). Common pattern: premature fix attempts before understanding root cause wasted hours."
+  - "Motivation: under time pressure, Claude (and humans) default to 'try the obvious fix' without first understanding *why* the bug exists. This skill enforces the investigate-first discipline and adds an escalation gate after 3 failed fix attempts to surface architectural misunderstanding earlier."
+  - "Projected use: fires on any non-trivial bug report, failing test, or unexpected behavior. Not for typos, off-by-one, or other 'look at the diff' bugs — the methodology is overkill there."
 ---
 
 # Systematic Debugging

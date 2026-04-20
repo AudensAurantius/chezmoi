@@ -1,3 +1,20 @@
+---
+name: start
+description: Begin work on a Beads issue — claim it and start a Timewarrior interval tagged with its billing tuple
+author: Michael Haynes
+scope: global
+tags: [time-tracking, beads, timewarrior]
+timestamps:
+  - action: created
+    at: 2026-04-20T00:35:06-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: J121-9kp.1 Wave 1 time-tracking bundle (2026-04-20). Companion to /stop, /switch, /status and the bd-timew bridge script at ~/.local/bin/bd-timew."
+  - "Motivation: claiming a bead and starting time tracking were two separate rituals (bd update --claim + timew start) that were easy to skip. One command enforces the pairing."
+  - "Projected use: invoke when starting work on a specific bead. Epic-level /start is OK for triage/refinement; /switch to a child bead as soon as concrete work begins so billing tuple resolves correctly."
+related: [/stop, /switch, /status, /time-report]
+---
+
 # /start — Begin work on a Beads issue
 
 Claim a Beads issue and start a Timewarrior interval tagged with its resolved billing tuple. Thin wrapper over `bd-timew start`.

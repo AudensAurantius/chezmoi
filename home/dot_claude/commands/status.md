@@ -1,3 +1,20 @@
+---
+name: status
+description: Show the current Timewarrior interval, bead, and elapsed time
+author: Michael Haynes
+scope: global
+tags: [time-tracking, timewarrior]
+timestamps:
+  - action: created
+    at: 2026-04-20T00:35:06-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: J121-9kp.1 Wave 1 time-tracking bundle (2026-04-20). Companion to /start, /stop, /switch."
+  - "Motivation: 'what am I tracking right now and for how long' is the single most common time-tracking question. Needed a zero-friction answer."
+  - "Projected use: invoke at any point to verify the current bead, billing tuple, and elapsed time. Read-only — never modifies state."
+related: [/start, /stop, /switch, /time-report]
+---
+
 # /status — Show the current Timewarrior interval
 
 Report what bead is currently being tracked, the resolved billing tuple, and elapsed time. Thin wrapper over `bd-timew status`.
