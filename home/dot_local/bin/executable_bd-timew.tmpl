@@ -1,4 +1,4 @@
-{{ if lookPath "bd" -}}
+{{ if and (lookPath "bd") (lookPath "timew") -}}
 #!/usr/bin/env python3
 """bd-timew: bridge between Beads issues and Timewarrior intervals.
 
@@ -14,20 +14,29 @@ Resolution order (first wins, merged onto default):
   4. Hardcoded global (svc = "Technology Services")
 
 Usage:
-  bd-timew start <issue-id>   # claim + timew start, tagged with resolved tuple
-  bd-timew stop               # timew stop (no status change in Beads)
-  bd-timew resolve <issue-id> # dry-run: print the resolved tuple only
+  bd-timew start <issue-id>    # claim + timew start, tagged with resolved tuple
+  bd-timew stop                # timew stop (no status change in Beads)
+  bd-timew switch <issue-id>   # stop current interval, then start on <issue-id>
+  bd-timew status              # show current interval's bead + tuple + elapsed
+  bd-timew resolve <issue-id>  # dry-run: print the resolved tuple only
 """
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-import yaml
+try:
+    import yaml
+except ModuleNotFoundError:
+    sys.exit(
+        "bd-timew: PyYAML not available. Install with `pip install --user pyyaml` "
+        "or ensure the interpreter on PATH has it."
+    )
 
 GLOBAL_SVC_DEFAULT = "Technology Services"
 
@@ -157,6 +166,112 @@ def cmd_stop() -> None:
     run(["timew", "stop"], check=False)
 
 
+def cmd_switch(issue_id: str) -> None:
+    """Stop the current interval (if any) and start a new one on issue_id.
+
+    Not transactional: if `start` fails after `stop` succeeds, no interval
+    will be running. Re-run `bd-timew start <id>` to recover.
+    """
+    cmd_stop()
+    cmd_start(issue_id)
+
+
+def _timew_get(key: str) -> str | None:
+    """Return the value of a timew DOM key, or None if unset/unavailable."""
+    result = run(["timew", "get", key], check=False, capture=True)
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    return value or None
+
+
+def _format_elapsed(start_iso: str) -> str:
+    """Format elapsed time since a timew `dom.active.start` timestamp.
+
+    timew emits this DOM key in local time as 'YYYY-MM-DDTHH:MM:SS' (naive)
+    and may also return compact UTC 'YYYYMMDDTHHMMSSZ' in some contexts.
+    """
+    compact = re.fullmatch(r"(\d{8})T(\d{6})Z", start_iso)
+    if compact:
+        date_part, time_part = compact.groups()
+        start = dt.datetime.strptime(
+            f"{date_part}T{time_part}Z", "%Y%m%dT%H%M%SZ"
+        ).replace(tzinfo=dt.timezone.utc)
+        now = dt.datetime.now(dt.timezone.utc)
+    else:
+        start = dt.datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+        now = (
+            dt.datetime.now(dt.timezone.utc)
+            if start.tzinfo
+            else dt.datetime.now()
+        )
+    delta = now - start
+    total_seconds = int(delta.total_seconds())
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, _ = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    return f"{minutes}m"
+
+
+def cmd_status() -> None:
+    """Show the currently tracked bead, tuple, and elapsed time."""
+    start_iso = _timew_get("dom.active.start")
+    if not start_iso:
+        print("bd-timew: no active timew interval.")
+        return
+
+    tag_count_raw = _timew_get("dom.active.tag.count") or "0"
+    try:
+        tag_count = int(tag_count_raw)
+    except ValueError:
+        tag_count = 0
+    tags = []
+    # timew DOM tags are 1-indexed.
+    for i in range(1, tag_count + 1):
+        tag = _timew_get(f"dom.active.tag.{i}")
+        if tag:
+            tags.append(tag)
+
+    # First tag without a colon is treated as the bead id (the start tuple
+    # tags all use key:value form: client:*, case:*, svc:*, billable:*).
+    bead_id = next((t for t in tags if ":" not in t), None)
+    elapsed = _format_elapsed(start_iso)
+
+    if bead_id:
+        issue = None
+        try:
+            issue = get_issue(bead_id)
+        except SystemExit:
+            pass
+        title = (issue or {}).get("title", "")
+        status = (issue or {}).get("status", "")
+        header = f"Tracking: {bead_id}"
+        if title:
+            header += f"  {title}"
+        print(header)
+        if status:
+            print(f"Status:   {status}")
+    else:
+        print("Tracking: (no bead tag found on active interval)")
+
+    print(f"Elapsed:  {elapsed}")
+
+    tuple_display = {
+        "client": None,
+        "case": None,
+        "svc": None,
+    }
+    for tag in tags:
+        for key in tuple_display:
+            prefix = f"{key}:"
+            if tag.startswith(prefix):
+                tuple_display[key] = tag[len(prefix):]
+    print(f"Client:   {tuple_display['client'] or '(none)'}")
+    print(f"Case:     {tuple_display['case'] or '(none)'}")
+    print(f"Svc:      {tuple_display['svc'] or '(none)'}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="bd-timew")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -165,6 +280,17 @@ def main() -> None:
     p_start.add_argument("issue_id")
 
     sub.add_parser("stop", help="stop current Timewarrior interval")
+
+    p_switch = sub.add_parser(
+        "switch",
+        help="stop current interval and start a new one on <issue_id>",
+    )
+    p_switch.add_argument("issue_id")
+
+    sub.add_parser(
+        "status",
+        help="show the current interval's bead, tuple, and elapsed time",
+    )
 
     p_resolve = sub.add_parser(
         "resolve", help="print resolved billing tuple without starting timew"
@@ -176,6 +302,10 @@ def main() -> None:
         cmd_start(args.issue_id)
     elif args.cmd == "stop":
         cmd_stop()
+    elif args.cmd == "switch":
+        cmd_switch(args.issue_id)
+    elif args.cmd == "status":
+        cmd_status()
     elif args.cmd == "resolve":
         cmd_start(args.issue_id, dry_run=True)
 
