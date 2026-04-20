@@ -1,6 +1,19 @@
-#compdef cht.sh
+#compdef cht.sh cheat
 
-__CHTSH_LANGS=($(curl -s cheat.sh/:list))
+# Read-through cache for cheat.sh/:list to avoid hitting the network on
+# every completion invocation. cheat.sheets content has been ~dormant since
+# 2025-03, so a long-lived cache is fine; bust it with
+# `cheat --refresh-completions` when something looks missing.
+__chtsh_list() {
+  cache="${XDG_CACHE_HOME:-$HOME/.cache}/cht.sh/list"
+  if [[ -s "$cache" ]]; then
+    cat "$cache"
+  else
+    mkdir -p "${cache:h}"
+    curl -s cheat.sh/:list | tee "$cache"
+  fi
+}
+__CHTSH_LANGS=($(__chtsh_list))
 _arguments -C \
   '--help[show this help message and exit]: :->noargs' \
   '--shell[enter shell repl]: :->noargs' \

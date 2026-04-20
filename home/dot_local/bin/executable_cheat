@@ -1,0 +1,71 @@
+#!/bin/sh
+# cheat — thin wrapper around cht.sh (https://cheat.sh).
+#
+# Two affordances beyond passthrough:
+#   --refresh-completions   Refresh the cached language list used by the
+#                           zsh completion ($cache_dir/list).
+#   --help / -h             Show this wrapper's help, then cht.sh's help.
+#
+# Everything else is forwarded verbatim to cht.sh.
+#
+# Cache path follows XDG Base Directory Spec: $XDG_CACHE_HOME (if set)
+# else $HOME/.cache. Never chezmoi-templated — runtime resolution stays
+# responsive to env changes and keeps the script portable.
+
+set -eu
+
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/cht.sh"
+cache_file="$cache_dir/list"
+
+if ! command -v cht.sh >/dev/null 2>&1; then
+  echo "cheat: cht.sh not on PATH — install via chezmoi (run_onchange_install-cht-sh.sh.tmpl)" >&2
+  exit 127
+fi
+
+print_wrapper_help() {
+  cat <<'HELP'
+----------------------------------------
+Wrapper affordances (cheat, not cht.sh):
+  --refresh-completions   Refresh the local cache of available cheat sheets
+                          ($XDG_CACHE_HOME/cht.sh/list, or ~/.cache/cht.sh/list)
+                          used by the zsh completion.
+
+Upstream cht.sh help follows:
+----------------------------------------
+HELP
+}
+
+refresh_completions() {
+  mkdir -p "$cache_dir"
+  tmp=$(mktemp)
+  # shellcheck disable=SC2064
+  trap "rm -f '$tmp'" EXIT
+  if ! curl -fsSL "https://cheat.sh/:list" -o "$tmp"; then
+    echo "cheat: failed to fetch cheat.sh/:list" >&2
+    exit 1
+  fi
+  # Basic sanity check — :list should be non-empty and contain newlines.
+  if [ ! -s "$tmp" ]; then
+    echo "cheat: cheat.sh/:list returned empty; leaving existing cache intact" >&2
+    exit 1
+  fi
+  mv "$tmp" "$cache_file"
+  trap - EXIT
+  lines=$(wc -l < "$cache_file")
+  echo "cheat: refreshed $cache_file ($lines entries)" >&2
+}
+
+# Handle wrapper-owned flags BEFORE delegating. --refresh-completions is a
+# terminator — after refresh, exit 0 without forwarding remaining args.
+case "${1:-}" in
+  --refresh-completions)
+    refresh_completions
+    exit 0
+    ;;
+  -h|--help)
+    print_wrapper_help
+    exec cht.sh --help
+    ;;
+esac
+
+exec cht.sh "$@"
