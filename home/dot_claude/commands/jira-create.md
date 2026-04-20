@@ -12,6 +12,7 @@ Arguments: $ARGUMENTS
 - `/jira-create <summary> --description=<text>` or `--description-file=<path>`
 - `/jira-create <summary> --project=<KEY>` — Jira project key (default: `BOCO`)
 - `/jira-create <summary> --assignee="<Display Name>"` — resolved via MCP `lookupJiraAccountId`
+- `/jira-create <summary> --client="<Client Name>"` — BOCO-only; populates the required Client custom field (`customfield_10072`)
 
 Flags may appear before or after the summary and in any order. The summary is everything left after flag tokens are removed — quote it if it contains `--` literally.
 
@@ -61,8 +62,9 @@ Flags may appear before or after the summary and in any order. The summary is ev
    - `description`: resolved description (omit if none)
    - `assignee_account_id`: resolved account ID (omit if none)
    - `additional_fields`: JSON object carrying anything else:
-     - Priority goes here: `{"priority": {"name": "<Jira name>"}}`.
-     - BOCO Task requires the `Client` custom field. If the user didn't supply one, **halt and ask** — don't pick one. Reference the pattern: `{"customfield_XXXXX": {"value": "<client name>"}}`. The BOCO `Client` field ID is **not** hardcoded here because we don't have a stable reference yet; surface the raw error if Jira rejects the create for missing custom fields, and let the user supply the field/value explicitly.
+     - Priority: `{"priority": {"name": "<Jira name>"}}`.
+     - `--client` (BOCO only): `{"customfield_10072": {"value": "<client name>"}}` — required for BOCO Task issue type. If omitted and Jira rejects with `customfield_10072: "Client is required."`, report the error and prompt the user to re-run with `--client="..."` rather than guessing.
+     - Other custom fields: pass through to `additional_fields` if the user provides `--custom fieldName=value` (not implemented in v1 — document as a future extension).
 
    On failure — especially "required field missing" for custom fields — surface the error verbatim and stop. **Do not create the Beads issue if Jira creation failed.**
 
