@@ -1,0 +1,38 @@
+{{ if and (.chezmoi.kernel.osrelease | lower | contains "wsl") (lookPath "cmd.exe") -}}
+#!/usr/bin/env bash
+# wsl-notify-send: WSL2 shim that routes to wsl-notify-send.exe on Windows.
+#
+# WSL2's D-Bus session registers org.freedesktop.Notifications as activatable
+# but has no running daemon, so stock `notify-send` blocks indefinitely. This
+# wrapper calls the Windows-side wsl-notify-send.exe instead, which raises
+# a native Windows toast via the Win32 toast API.
+#
+# The exe path is resolved at runtime from %USERPROFILE% so it tracks the
+# actual Windows user rather than hardcoding a name. The exe itself lives
+# at %USERPROFILE%\bin\wsl-notify-send.exe — update INSTALL_SUBPATH if you
+# move it. Installation: see J121 memory feedback-time-tracking.md.
+
+set -euo pipefail
+
+INSTALL_SUBPATH="bin/wsl-notify-send.exe"
+
+WINPROFILE="$(wslpath "$(cmd.exe /C 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')")"
+WNS_EXE="${WINPROFILE}/${INSTALL_SUBPATH}"
+
+if [ ! -x "$WNS_EXE" ]; then
+    echo "wsl-notify-send: $WNS_EXE not found or not executable" >&2
+    exit 1
+fi
+
+title="${1:-notification}"
+shift || true
+body="$*"
+
+if [ -n "$body" ]; then
+    msg="${title}: ${body}"
+else
+    msg="$title"
+fi
+
+exec "$WNS_EXE" "$msg"
+{{- end }}

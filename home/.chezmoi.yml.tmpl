@@ -6,6 +6,22 @@ data:
     tmpDir: /tmp
     venvDir: {{ joinPath .chezmoi.homeDir ".venv" | quote }}
     npmDir: {{ joinPath .chezmoi.homeDir ".npm-packages" }}
+  # Preferred desktop-notification command. WSL2's D-Bus registers
+  # org.freedesktop.Notifications as activatable but has no running daemon,
+  # so stock `notify-send` blocks indefinitely. Under WSL, prefer
+  # wsl-notify-send (Windows toast shim) if its chezmoi-managed wrapper is
+  # present in source (i.e. will be installed by `chezmoi apply`); else
+  # fall back to notify-send. Stat-based check avoids the init-before-apply
+  # chicken-and-egg problem of using lookPath.
+  notifier: {{ if (.chezmoi.kernel.osrelease | lower | contains "wsl") -}}
+    {{- if stat (joinPath .chezmoi.sourceDir "dot_local/bin/executable_wsl-notify-send.tmpl") -}}
+      "wsl-notify-send"
+    {{- else -}}
+      "notify-send"
+    {{- end -}}
+  {{- else -}}
+    "notify-send"
+  {{- end }}
   {{- if eq .chezmoi.hostname "Blade16-MHaynes" }}
   email: "mhaynes@boldorange.com"
   gpg:
