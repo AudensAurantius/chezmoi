@@ -1,3 +1,20 @@
+---
+name: add-command
+description: Author a new slash command from conversation context
+author: Michael Haynes
+scope: global
+tags: [meta-tooling, claude-config, command-family]
+timestamps:
+  - action: created
+    at: 2026-04-20T05:15:24-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: J121-9kp.2.6 meta-tooling wave 2 discussion (2026-04-20). First of three /add-* commands; the pattern-exemplar for /add-skill and /add-agent."
+  - "Motivation: the project had accumulated enough ad-hoc slash commands that authoring-friction was worth formalizing. Prerequisite for the broader /add-*, /edit-*, /remove-* CRUD family."
+  - "Projected use: invoke mid-conversation when a reusable pattern emerges that deserves preservation as a slash command. Default is inline-review-and-deploy; --create-draft for external editing."
+related: [/edit-command, /remove-command, /add-command-alias, /add-skill, /add-agent, /resolve]
+---
+
 # /add-command — Author a new slash command from conversation context
 
 Draft a new slash command from recent conversation, present inline for review
@@ -23,6 +40,8 @@ Arguments: $ARGUMENTS
   user edits externally, then re-invokes with `--from-draft=<path>`.
 - `/add-command <name> --from-draft=<path>` — skip drafting; load the file
   as final content and proceed to deploy confirmation.
+- `/add-command <name> --author="<name>"` — override the author (defaults
+  to `git config user.name`).
 
 Mutually exclusive groups:
 - `--global` vs. `--local`
@@ -74,12 +93,39 @@ Mutually exclusive groups:
 
 5. **Draft the content.** On confirmation, distill the selected context into
    a reusable prompt template. A good slash command:
+   - Opens with a YAML frontmatter block (see step 5a below for required
+     fields).
    - Uses `$ARGUMENTS` for the argument string.
-   - Opens with a short heading stating the purpose in one sentence.
+   - Has an H1 heading `# /<name> — <purpose>` immediately below the
+     frontmatter, matching the frontmatter `description` in purpose.
    - Numbered instructions for multi-step behavior.
    - Explicit halt conditions with concrete error messages.
    - Invariants (`Never X`, `Do not Y`) for destructive or ambiguous edges.
    - References to related commands.
+
+5a. **Metadata frontmatter — required for every new command.** Populate:
+    - `name` — the command stem (filename without `.md`).
+    - `description` — one-line purpose. The registry uses this verbatim, so
+      write it to stand alone (no `/<name> —` prefix). Should convey the
+      same purpose as the H1 in different words.
+    - `author` — `--author` flag value if provided, else
+      `git config user.name`.
+    - `scope` — `global` or `local`, matching the destination from step 3.
+    - `tags` — categorical list (e.g., `[time-tracking, beads]`). Pick
+      2-5 tags that would help `/resolve` or `/audit` group related tools.
+    - `timestamps` — a single-entry list on creation:
+      `[{action: created, at: <ISO-8601 now>, actor: <author>}]`. Edits
+      append; never replace.
+    - `comments` — array with at least three bullets covering:
+      - **Source** — the conversation, bead, or decision that prompted
+        creation (e.g., `"Source: J121-9kp.2.6 meta-tooling discussion
+        (2026-04-20)."`).
+      - **Motivation** — why this command earns its keep *now* (not just
+        "it would be nice"). Ideally tied to an incident or friction
+        pattern.
+      - **Projected use** — expected invocation context and primary flow.
+    - `related` — optional list of related tool names (`/edit-command`,
+      etc.) for `/resolve` navigation.
 
    Models to follow: `~/.claude/commands/start.md` (thin wrapper),
    `~/.claude/commands/jira-create.md` (flag parsing + multi-tool workflow).
@@ -119,6 +165,14 @@ Mutually exclusive groups:
   is not enough; an unfocused conversation is not enough.
 - Name must not contain `/`, `..`, or whitespace. Lowercase with hyphens is
   convention.
+- **Every new command ships with metadata frontmatter.** `name`,
+  `description`, `author`, `scope`, `tags`, `timestamps` (one `created`
+  entry), and a `comments` array with source/motivation/projected-use
+  bullets. Missing metadata is a halt condition, not a warning.
+- **H1 follows the canonical format** `# /<name> — <purpose>`. The H1 and
+  the frontmatter `description` convey the same purpose in different
+  phrasings. The registry uses frontmatter; the H1 is for readers-of-the-
+  file.
 
 ## Related
 

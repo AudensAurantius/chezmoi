@@ -1,3 +1,20 @@
+---
+name: add-skill
+description: Author a new skill from conversation context with mandatory --trigger and draft-file default
+author: Michael Haynes
+scope: global
+tags: [meta-tooling, claude-config, skill-family, high-blast-radius]
+timestamps:
+  - action: created
+    at: 2026-04-20T05:15:24-05:00
+    actor: Michael Haynes
+comments:
+  - "Source: J121-9kp.2.6 meta-tooling wave 2 discussion (2026-04-20). Second of three /add-* commands."
+  - "Motivation: skills are the highest-blast-radius config object — they auto-fire across all future sessions based on trigger matching. A badly-scoped skill can hijack unrelated conversations for weeks before detection. Default behavior reflects this: --create-draft, not auto-deploy."
+  - "Projected use: invoke when a convention emerges worth codifying as an auto-loading skill. --trigger flag required at creation time to force explicit thinking about invocation scope."
+related: [/edit-skill, /remove-skill, /add-command, /add-agent, /resolve, /audit]
+---
+
 # /add-skill — Author a new skill from conversation context
 
 Draft a new skill from recent conversation, present for review, and deploy to
@@ -31,6 +48,8 @@ Arguments: $ARGUMENTS
   deploy.
 - `/add-skill <name> --trigger="<desc>" --deploy` — force inline-review-and-
   deploy instead of the default draft-file flow. Use only when confident.
+- `/add-skill <name> --trigger="<desc>" --author="<name>"` — override the
+  author (defaults to `git config user.name`).
 
 Mutually exclusive groups:
 - `--global` vs. `--local`
@@ -108,7 +127,7 @@ Mutually exclusive groups:
    draft.
 
 6. **Draft the content.** On confirmation, produce the SKILL.md with:
-   - YAML frontmatter containing `name` and `description`. The
+   - YAML frontmatter (see step 6a below for required fields). The
      `description` is where the trigger goes — phrase it so it reads as
      both a skill summary *and* an auto-invocation cue. Follow the
      convention seen in existing skills: `"<short summary>. TRIGGER when
@@ -116,6 +135,30 @@ Mutually exclusive groups:
      exemplars>."`
    - Body in markdown: what the skill codifies, must-know rules, related
      references, canonical exemplars, when to invoke autonomously.
+
+6a. **Metadata frontmatter — required for every new skill.** Populate:
+    - `name` — the skill name (same as the containing directory).
+    - `description` — the trigger description, phrased as both summary and
+      auto-invocation cue. This is the load-bearing field — the value the
+      user passed via `--trigger` goes here, often expanded into full
+      TRIGGER-style language.
+    - `author` — `--author` flag value if provided, else
+      `git config user.name`.
+    - `scope` — `global` or `local`, matching the destination from step 3.
+    - `tags` — categorical list (e.g., `[jira, comments, adf]`). Pick
+      2-5 tags. For skills, include a `high-blast-radius` tag if the
+      trigger is broad (so `/audit` can find it quickly).
+    - `timestamps` — a single-entry list on creation:
+      `[{action: created, at: <ISO-8601 now>, actor: <author>}]`. Edits
+      append; never replace.
+    - `comments` — array with at least three bullets covering:
+      - **Source** — the conversation, bead, or decision that prompted
+        creation.
+      - **Motivation** — why this skill earns its keep. For skills
+        specifically, state the failure mode it prevents (what Claude
+        would do wrong without this skill).
+      - **Projected use** — when the skill should auto-fire and, equally
+        importantly, what it should NOT fire on.
 
    Models to follow: `~/.claude/skills/jira-conventions/SKILL.md`,
    `~/.claude/skills/time-tracking/SKILL.md`,
@@ -169,6 +212,10 @@ Mutually exclusive groups:
   disqualifying. Push back, invite narrowing, do not ship.
 - **Flag overlap with existing skills.** Two skills firing on the same
   triggers is a collision the user must resolve before shipping.
+- **Every new skill ships with metadata frontmatter.** `name`,
+  `description`, `author`, `scope`, `tags`, `timestamps` (one `created`
+  entry), and a `comments` array with source/motivation/projected-use
+  bullets. Missing metadata is a halt condition.
 
 ## Related
 
