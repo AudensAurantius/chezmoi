@@ -14,7 +14,17 @@ __chtsh_list() {
   fi
 }
 __CHTSH_LANGS=($(__chtsh_list))
+
+# $service is set by #compdef to the invoked command name. Only expose
+# --refresh-completions when invoked as `cheat` (wrapper affordance);
+# cht.sh itself doesn't know about the flag.
+local -a __chtsh_extra_opts
+if [[ "$service" == "cheat" ]]; then
+  __chtsh_extra_opts+=('--refresh-completions[refresh ~/.cache/cht.sh/list]')
+fi
+
 _arguments -C \
+  "${__chtsh_extra_opts[@]}" \
   '--help[show this help message and exit]: :->noargs' \
   '--shell[enter shell repl]: :->noargs' \
   '1:Cheat Sheet:->lang' \
