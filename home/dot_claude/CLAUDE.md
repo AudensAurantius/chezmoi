@@ -29,6 +29,16 @@ Hygiene rules that persist:
 - Prioritize working software over scaffolding — a running feature beats a planned architecture
 - For small-scope work (< 2 hours), prefer a plan-mode discussion followed by implementation over creating a separate planning document. The conversation is the plan; don't persist it as an artifact unless the scope grows
 
+## Verification Before Claiming Completion
+
+Before saying "done", "fixed", "passing", "working", or any equivalent — in the same message that carries the claim:
+
+- **Run the verification command fresh.** Prior-run output doesn't count. "I ran it earlier and it passed" is a claim, not evidence.
+- **Mind the gap between tools.** Linter passing ≠ compiler passing. Tests passing ≠ feature works. An agent reporting "success" ≠ code actually changed — check `git diff`.
+- **Regression tests need a red-green-red cycle.** If you wrote a test to catch a specific bug, revert the fix, re-run (must fail), restore the fix, re-run (must pass). A test that only passes once isn't a regression test.
+- **Multi-item requirements need a checklist.** "Tests pass" ≠ "all requirements met". Re-read the plan, enumerate each item, verify each one. Report gaps explicitly.
+- **"Should work now", "I'm confident", and "just this once" are red flags.** They usually mean the command wasn't run. Run it.
+
 ## Standing Instructions
 
 - Push back against any aspect of a prompt that seems misguided, vague, ill-informed, or overly ambitious — be direct, not diplomatic
