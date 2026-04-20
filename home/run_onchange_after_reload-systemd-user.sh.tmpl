@@ -17,6 +17,20 @@ fi
 
 systemctl --user daemon-reload
 
+{{ if .enable_systemd_session_services -}}
+# Lingering lets user timers fire without an active login session. Required
+# for housekeeping timers like timew-autostop that should run on a schedule
+# regardless of whether the user is logged in.
+if command -v loginctl >/dev/null 2>&1 && ! loginctl show-user "$USER" -p Linger --value 2>/dev/null | grep -qx yes; then
+    if sudo -n true 2>/dev/null; then
+        sudo loginctl enable-linger "$USER"
+        echo "systemd-user-reload: enabled lingering for $USER"
+    else
+        echo "systemd-user-reload: lingering not enabled and sudo unavailable; run 'sudo loginctl enable-linger $USER' manually" >&2
+    fi
+fi
+{{ end -}}
+
 # Enable + start every timer unit present in ~/.config/systemd/user/. Service
 # units are not enabled directly — their corresponding timers invoke them.
 shopt -s nullglob
