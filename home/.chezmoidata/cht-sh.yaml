@@ -1,0 +1,21 @@
+# Pinned cht.sh script, consumed by run_onchange_install-cht-sh.sh.tmpl.
+#
+# cht.sh (https://github.com/chubin/cheat.sh) does NOT cut releases — it's
+# rolling from master. `version` is therefore the date the SHA256 was
+# captured, not a semver tag. The SHA is the actual pin.
+#
+# Note: top-level key is "chtSh" (camelCase) rather than "cht-sh" or
+# "cht.sh" — both hyphens and dots break Go template dot-access.
+#
+# To bump:
+#   1. `curl -fsSL https://cht.sh/:cht.sh | sha256sum`
+#   2. Update `version` to today's date and `sha256` to the new digest
+#   3. Commit — rendered script hash changes, installer re-runs
+#
+# Completion refresh (separate, manual):
+#   1. `curl -fsSL https://cheat.sh/:zsh > home/dot_local/share/zsh/completions/_cht`
+#   2. Commit. The completion is pinned content, not runtime-generated.
+
+chtSh:
+  version: "2026-04-20"
+  sha256:  "d3135e42b800ff2e7aac44d4dfe500f0f4e2c7eb00a1c2191b0dc8b28431f155"
