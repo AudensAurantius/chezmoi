@@ -1,5 +1,9 @@
 #!/bin/sh
-# cheat — thin wrapper around cht.sh (https://cheat.sh).
+# cht — thin wrapper around cht.sh (https://cheat.sh).
+#
+# Name convention: `cht` shadows `cht.sh` with additional affordances.
+# Originally named `cheat` but that collides with cheat/cheat's binary
+# (github.com/cheat/cheat), which we also install; renamed 2026-04-20.
 #
 # Two affordances beyond passthrough:
 #   --refresh-completions   Refresh the cached language list used by the
@@ -18,14 +22,14 @@ cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/cht.sh"
 cache_file="$cache_dir/list"
 
 if ! command -v cht.sh >/dev/null 2>&1; then
-  echo "cheat: cht.sh not on PATH — install via chezmoi (run_onchange_install-cht-sh.sh.tmpl)" >&2
+  echo "cht: cht.sh not on PATH — install via chezmoi (run_onchange_install-cht-sh.sh.tmpl)" >&2
   exit 127
 fi
 
 print_wrapper_help() {
   cat <<'HELP'
 ----------------------------------------
-Wrapper affordances (cheat, not cht.sh):
+Wrapper affordances (cht, not cht.sh):
   --refresh-completions   Refresh the local cache of available cheat sheets
                           ($XDG_CACHE_HOME/cht.sh/list, or ~/.cache/cht.sh/list)
                           used by the zsh completion.
@@ -41,22 +45,19 @@ refresh_completions() {
   # shellcheck disable=SC2064
   trap "rm -f '$tmp'" EXIT
   if ! curl -fsSL "https://cheat.sh/:list" -o "$tmp"; then
-    echo "cheat: failed to fetch cheat.sh/:list" >&2
+    echo "cht: failed to fetch cheat.sh/:list" >&2
     exit 1
   fi
-  # Basic sanity check — :list should be non-empty and contain newlines.
   if [ ! -s "$tmp" ]; then
-    echo "cheat: cheat.sh/:list returned empty; leaving existing cache intact" >&2
+    echo "cht: cheat.sh/:list returned empty; leaving existing cache intact" >&2
     exit 1
   fi
   mv "$tmp" "$cache_file"
   trap - EXIT
   lines=$(wc -l < "$cache_file")
-  echo "cheat: refreshed $cache_file ($lines entries)" >&2
+  echo "cht: refreshed $cache_file ($lines entries)" >&2
 }
 
-# Handle wrapper-owned flags BEFORE delegating. --refresh-completions is a
-# terminator — after refresh, exit 0 without forwarding remaining args.
 case "${1:-}" in
   --refresh-completions)
     refresh_completions

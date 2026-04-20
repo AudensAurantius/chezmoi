@@ -1,0 +1,104 @@
+#!/bin/sh
+# tutor — unified lookup across cht.sh, cheat, and nb.
+#
+# Concatenates each source's output with a header per source; pipes the
+# result to $PAGER. Minimal by design — no config file, no adapters, no
+# output-format normalization. If you need per-source scoping beyond what
+# each tool's own config provides, either (a) use the tool directly, or
+# (b) flag the pain and we'll expand this wrapper.
+#
+# the-way is NOT queried — it's a snippet store for copy-and-run, not a
+# reference source. Use `the-way search <term>` directly when you want a
+# runnable snippet.
+
+set -eu
+
+show_help() {
+  cat <<'EOF'
+Usage: tutor <topic> [flags]
+
+Aggregates responses from cht.sh, cheat, and nb for a single topic,
+piping the concatenated output to $PAGER (default: less -R).
+
+Flags:
+  --skip=SRC        Skip one source: cht | cheat | nb (repeatable)
+  --only=SRC        Query only the named source
+  --nb-notebook=N   Scope nb search to a single notebook (default: search all)
+  -h, --help        Show this help
+
+Examples:
+  tutor python:sorted
+  tutor --skip=nb git rebase
+  tutor --only=cheat tar
+  tutor --nb-notebook=reference ssh
+
+Sources (queried when present on PATH):
+  cht.sh           Remote cheat sheets (via cht.sh)
+  cheat            Local + community cheat sheets (via cheat/cheat)
+  nb               Your curated knowledge base (via nb)
+
+the-way is intentionally excluded — it's a snippet store, not a reference
+source. Use `the-way search <term>` directly for runnable snippets.
+EOF
+}
+
+skip_cht=0; skip_cheat=0; skip_nb=0
+only=""
+nb_notebook=""
+topic=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help)      show_help; exit 0 ;;
+    --skip=cht)     skip_cht=1 ;;
+    --skip=cheat)   skip_cheat=1 ;;
+    --skip=nb)      skip_nb=1 ;;
+    --only=cht|--only=cheat|--only=nb) only="${1#*=}" ;;
+    --nb-notebook=*) nb_notebook="${1#*=}" ;;
+    --*)            echo "tutor: unknown flag: $1" >&2; exit 64 ;;
+    *)              topic="${topic:+$topic }$1" ;;
+  esac
+  shift
+done
+
+if [ -z "$topic" ]; then
+  echo "tutor: no topic provided" >&2
+  echo "       run \`tutor --help\` for usage" >&2
+  exit 64
+fi
+
+want() {
+  if [ -n "$only" ]; then
+    [ "$only" = "$1" ] && return 0 || return 1
+  fi
+  case "$1" in
+    cht)   [ "$skip_cht" -eq 0 ] ;;
+    cheat) [ "$skip_cheat" -eq 0 ] ;;
+    nb)    [ "$skip_nb" -eq 0 ] ;;
+  esac
+}
+
+render_section() {
+  header="$1"; shift
+  printf '==================== %s ====================\n' "$header"
+  if "$@" 2>&1; then :; else
+    printf '(no results or command failed: %s)\n' "$*"
+  fi
+  printf '\n'
+}
+
+{
+  if want cht   && command -v cht.sh >/dev/null 2>&1; then
+    render_section "cht.sh" cht.sh "$topic"
+  fi
+  if want cheat && command -v cheat  >/dev/null 2>&1; then
+    render_section "cheat (local)" cheat "$topic"
+  fi
+  if want nb    && command -v nb     >/dev/null 2>&1; then
+    if [ -n "$nb_notebook" ]; then
+      render_section "nb:$nb_notebook" nb "${nb_notebook}:search" "$topic"
+    else
+      render_section "nb (all notebooks)" nb search "$topic"
+    fi
+  fi
+} | "${PAGER:-less -R}"

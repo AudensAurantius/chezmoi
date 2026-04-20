@@ -1,4 +1,4 @@
-#compdef cht.sh cheat
+#compdef cht.sh cht
 
 # Read-through cache for cheat.sh/:list to avoid hitting the network on
 # every completion invocation. cheat.sheets content has been ~dormant since
@@ -16,10 +16,10 @@ __chtsh_list() {
 __CHTSH_LANGS=($(__chtsh_list))
 
 # $service is set by #compdef to the invoked command name. Only expose
-# --refresh-completions when invoked as `cheat` (wrapper affordance);
+# --refresh-completions when invoked as `cht` (wrapper affordance);
 # cht.sh itself doesn't know about the flag.
 local -a __chtsh_extra_opts
-if [[ "$service" == "cheat" ]]; then
+if [[ "$service" == "cht" ]]; then
   __chtsh_extra_opts+=('--refresh-completions[refresh ~/.cache/cht.sh/list]')
 fi
 

@@ -1,0 +1,60 @@
+#!/bin/sh
+# run_onchange_install-cheat.sh.tmpl — install cheat (github.com/cheat/cheat)
+# to ~/.local/bin.
+#
+# cheat publishes per-OS/arch GZIPPED single-binary assets (not tarballs).
+# Installer downloads the .gz, verifies the tarball-style SHA256 against
+# the .chezmoidata pin, gunzips, and places the binary.
+#
+# Community cheatsheets corpus is NOT installed by this script — it's a
+# separate ~400-sheet git repo. See .chezmoidata/cheat.yaml for the
+# clone command.
+{{- $v := .cheat.version -}}
+{{- $platform := printf "%s_%s" .chezmoi.os .chezmoi.arch -}}
+{{- /* Asset naming uses dashes, not underscores: cheat-linux-amd64.gz */ -}}
+{{- $assetOS := .chezmoi.os -}}
+{{- $assetArch := .chezmoi.arch -}}
+{{- $assetName := printf "cheat-%s-%s.gz" $assetOS $assetArch -}}
+{{- $sha := dig $platform "" .cheat.checksums -}}
+{{- $assetURL := printf "https://github.com/cheat/cheat/releases/download/%s/%s" $v $assetName }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+ASSET_NAME={{ $assetName | quote }}
+ASSET_URL={{ $assetURL | quote }}
+EXPECTED_SHA={{ $sha | quote }}
+INSTALL_PATH={{ joinPath .chezmoi.homeDir ".local" "bin" "cheat" | quote }}
+
+if [ -z "$EXPECTED_SHA" ]; then
+  echo "cheat installer: no pinned checksum for $ASSET_NAME; skipping" >&2
+  exit 0
+fi
+
+# Idempotency guard — probe installed binary's version output.
+# `cheat --version` prints "5.1.0" (no prefix).
+if [ -x "$INSTALL_PATH" ] && "$INSTALL_PATH" --version 2>/dev/null | grep -qF "$VERSION"; then
+  echo "cheat installer: $VERSION already installed at $INSTALL_PATH" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$INSTALL_PATH")"
+
+tmp_gz=$(mktemp)
+trap 'rm -f "$tmp_gz" "${tmp_gz}.bin"' EXIT
+
+echo "cheat installer: downloading $ASSET_URL" >&2
+curl -fsSL -o "$tmp_gz" "$ASSET_URL"
+
+actual=$(sha256sum "$tmp_gz" | awk '{print $1}')
+if [ "$EXPECTED_SHA" != "$actual" ]; then
+  echo "cheat installer: checksum mismatch for $ASSET_NAME" >&2
+  echo "  expected: $EXPECTED_SHA" >&2
+  echo "  actual:   $actual" >&2
+  exit 1
+fi
+
+gunzip -c "$tmp_gz" > "${tmp_gz}.bin"
+chmod u+x "${tmp_gz}.bin"
+mv "${tmp_gz}.bin" "$INSTALL_PATH"
+echo "cheat installer: $VERSION installed to $INSTALL_PATH" >&2

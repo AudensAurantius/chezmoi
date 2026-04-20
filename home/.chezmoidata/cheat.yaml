@@ -1,0 +1,28 @@
+# Pinned cheat/cheat release, consumed by run_onchange_install-cheat.sh.tmpl.
+#
+# cheat (https://github.com/cheat/cheat) publishes per-OS/arch gzipped
+# binaries (e.g., cheat-linux-amd64.gz) rather than tarballs. Upstream
+# does NOT publish a checksums file, so SHAs are computed locally at pin
+# time against the compressed .gz assets:
+#
+#   for p in linux-amd64 darwin-amd64 darwin-arm64 linux-arm64 ; do
+#     echo -n "$p: "
+#     curl -fsSL "https://github.com/cheat/cheat/releases/download/<v>/cheat-${p}.gz" | sha256sum | awk '{print $1}'
+#   done
+#
+# Community cheatsheets are NOT bundled. To get the community corpus:
+#   git clone https://github.com/cheat/cheatsheets ~/.config/cheat/cheatsheets/community
+# (or run `cheat` and answer the first-run prompt, which does the clone.)
+#
+# To bump:
+#   1. version: new upstream tag (no "v" prefix for this tool)
+#   2. checksums: recompute per above
+#   3. commit — rendered script hash changes, installer re-runs.
+
+cheat:
+  version: "5.1.0"
+  checksums:
+    linux_amd64:  "8c8405574d51d63ee89594bfed241f478d507d96af78e5c370dcbe65633d7b34"
+    linux_arm64:  "78fd70fedd7c2cd297af827c29c495c8f6d2b9a880739450ac13e18eefa2f17b"
+    darwin_amd64: "d99884c698d10f0b191deac969190c2b5311a8202f4f8c394130969f9adb8309"
+    darwin_arm64: "4fcc9ef5b2b3ae31d3f9c77dc6492a4336592c34c60d8a20814fb6155642b37c"
