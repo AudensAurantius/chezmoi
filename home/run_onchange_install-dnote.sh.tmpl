@@ -1,0 +1,64 @@
+#!/bin/sh
+# run_onchange_install-dnote.sh.tmpl — install dnote to ~/.local/bin.
+#
+# dnote ships per-platform tarballs whose tarball SHA256 is pinned in
+# .chezmoidata/dnote.yaml. Version + tarball checksum pinning keeps
+# chezmoi apply/diff/status offline-friendly. After tarball-sha verify,
+# extract and move the `dnote` binary into place.
+{{- $v := .dnote.version -}}
+{{- $tag := .dnote.tag -}}
+{{- $platform := printf "%s_%s" .chezmoi.os .chezmoi.arch -}}
+{{- $assetName := printf "dnote_%s_%s.tar.gz" $v $platform -}}
+{{- $sha := dig $platform "" .dnote.checksums -}}
+{{- $assetURL := printf "https://github.com/dnote/dnote/releases/download/%s/%s" $tag $assetName }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+ASSET_NAME={{ $assetName | quote }}
+ASSET_URL={{ $assetURL | quote }}
+EXPECTED_SHA={{ $sha | quote }}
+INSTALL_PATH={{ joinPath .chezmoi.homeDir ".local" "bin" "dnote" | quote }}
+
+if [ -z "$EXPECTED_SHA" ]; then
+  # No checksum pinned for this OS/arch in .chezmoidata/dnote.yaml.
+  # Skip with a note rather than fail `chezmoi apply`.
+  echo "dnote installer: no pinned checksum for $ASSET_NAME; skipping" >&2
+  exit 0
+fi
+
+# Idempotency guard. The installed binary's SHA differs from the tarball's
+# SHA, so we probe the installed version instead. `dnote version` prints
+# "dnote <version>" — unlike dstask v1.0.1, ldflags are wired up here.
+if [ -x "$INSTALL_PATH" ] && "$INSTALL_PATH" version 2>/dev/null | grep -qF "$VERSION"; then
+  echo "dnote installer: $VERSION already installed at $INSTALL_PATH" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$INSTALL_PATH")"
+
+tmp_tar=$(mktemp)
+tmp_dir=$(mktemp -d)
+trap 'rm -rf "$tmp_tar" "$tmp_dir"' EXIT
+
+echo "dnote installer: downloading $ASSET_URL" >&2
+curl -fsSL -o "$tmp_tar" "$ASSET_URL"
+
+actual=$(sha256sum "$tmp_tar" | awk '{print $1}')
+if [ "$EXPECTED_SHA" != "$actual" ]; then
+  echo "dnote installer: checksum mismatch for $ASSET_NAME" >&2
+  echo "  expected: $EXPECTED_SHA" >&2
+  echo "  actual:   $actual" >&2
+  exit 1
+fi
+
+tar -xzf "$tmp_tar" -C "$tmp_dir"
+binary=$(find "$tmp_dir" -type f -name dnote | head -1)
+if [ -z "$binary" ]; then
+  echo "dnote installer: no 'dnote' binary in $ASSET_NAME" >&2
+  exit 1
+fi
+
+chmod u+x "$binary"
+mv "$binary" "$INSTALL_PATH"
+echo "dnote installer: $VERSION installed to $INSTALL_PATH" >&2

@@ -1,0 +1,44 @@
+#!/bin/sh
+# run_onchange_install-nb.sh.tmpl — install nb to ~/.local/bin.
+#
+# nb ships as a single portable bash script, so install is download →
+# sha256-verify → chmod → move. Version + hash pinned in
+# .chezmoidata/nb.yaml keep chezmoi apply/diff/status offline-friendly.
+{{- $v := .nb.version -}}
+{{- $assetURL := printf "https://github.com/xwmx/nb/releases/download/%s/nb" $v }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+ASSET_URL={{ $assetURL | quote }}
+EXPECTED_SHA={{ .nb.sha256 | quote }}
+INSTALL_PATH={{ joinPath .chezmoi.homeDir ".local" "bin" "nb" | quote }}
+
+# Idempotency guard — matches dstask installer pattern. `run_onchange_` is
+# the primary skip gate; this handles manual re-runs when the installed
+# script already matches the pinned hash.
+if [ -x "$INSTALL_PATH" ] \
+    && [ "$(sha256sum "$INSTALL_PATH" 2>/dev/null | awk '{print $1}')" = "$EXPECTED_SHA" ]; then
+  echo "nb installer: $VERSION already installed at $INSTALL_PATH" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$INSTALL_PATH")"
+
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+
+echo "nb installer: downloading $ASSET_URL" >&2
+curl -fsSL -o "$tmp" "$ASSET_URL"
+
+actual=$(sha256sum "$tmp" | awk '{print $1}')
+if [ "$EXPECTED_SHA" != "$actual" ]; then
+  echo "nb installer: checksum mismatch" >&2
+  echo "  expected: $EXPECTED_SHA" >&2
+  echo "  actual:   $actual" >&2
+  exit 1
+fi
+
+chmod u+x "$tmp"
+mv "$tmp" "$INSTALL_PATH"
+echo "nb installer: $VERSION installed to $INSTALL_PATH" >&2

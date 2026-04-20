@@ -1,0 +1,21 @@
+# Pinned dnote release, consumed by run_onchange_install-dnote.sh.tmpl.
+#
+# dnote (https://github.com/dnote/dnote) ships per-platform tarballs.
+# The upstream tag uses a "cli-v" prefix (e.g., "cli-v0.16.0") but the
+# filenames use bare semver (e.g., "0.16.0"), so both are pinned.
+#
+# To bump:
+#   1. version: bare semver from the asset filenames
+#   2. tag:     upstream git tag ("cli-v" + version)
+#   3. checksums: verbatim from
+#      https://github.com/dnote/dnote/releases/download/<tag>/dnote_<version>_checksums.txt
+#   4. commit — rendered script hash changes, triggering chezmoi re-run.
+
+dnote:
+  version: "0.16.0"
+  tag:     "cli-v0.16.0"
+  checksums:
+    linux_amd64:  "a81ce7c5d8aface2272ceded700ba8524bc5c2e7457d751b5aa5a831611075d6"
+    linux_arm64:  "8f56d2a9c93e9dcd2f4b9f8a3f747f9689983abb4ba7ba331d364f8fca1d6680"
+    darwin_amd64: "893531d29a401443e3660efb59b96302904fa158ba0f5fc92906f6f174424f1e"
+    darwin_arm64: "bc263c0dd15416323e85c10c4b7a2543138279982cd9ddeed0744569ccaaec71"
