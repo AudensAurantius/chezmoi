@@ -1,0 +1,21 @@
+# Pinned dstask release, consumed by run_onchange_install-dstask.sh.tmpl.
+#
+# Kept in .chezmoidata rather than fetched at template time so that
+# `chezmoi apply`, `chezmoi diff`, and `chezmoi status` stay offline-friendly
+# and don't burn the anonymous GitHub API rate limit (60/hr per IP).
+#
+# To bump:
+#   1. version:         upstream tag stripped of the leading "v"
+#   2. checksums:       verbatim from
+#      https://github.com/naggie/dstask/releases/download/v<version>/checksums.sha256
+#      (only assets named `dstask_<version>_<os>_<arch>` are used; the
+#      dash-style `dstask-<os>-<arch>` assets are not checksummed upstream)
+#   3. commit — the script's rendered hash changes, triggering chezmoi to
+#      re-run the installer on next `chezmoi apply`.
+
+dstask:
+  version: "1.0.1"
+  checksums:
+    linux_amd64:  "77b25ef744e5cf45af5a2773b73596c6a4e6e7888c57afe1ec8d70286a370b34"
+    darwin_amd64: "03b70b6e6fef7942dea291485391e9f9d5cb2c8c854ffaa48a5d868940b43b19"
+    darwin_arm64: "62d30289982749694933fe1f57ac0912d0020164a567c3eb90ccd8c9eee96edd"

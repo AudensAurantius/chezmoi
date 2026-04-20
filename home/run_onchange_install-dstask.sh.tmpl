@@ -1,0 +1,56 @@
+#!/bin/sh
+# run_onchange_install-dstask.sh.tmpl — install dstask to ~/.local/bin.
+#
+# Version + per-asset SHA256 checksums are pinned in .chezmoidata/dstask.yaml.
+# The rendered script hash changes whenever that file changes, which is the
+# signal for chezmoi to re-execute the installer. No network calls happen at
+# template-render time, so `chezmoi diff`/`status`/`apply` remain fast and
+# offline-friendly.
+{{- $v := .dstask.version -}}
+{{- $platform := printf "%s_%s" .chezmoi.os .chezmoi.arch -}}
+{{- $assetName := printf "dstask_%s_%s" $v $platform -}}
+{{- $sha := dig $platform "" .dstask.checksums -}}
+{{- $assetURL := printf "https://github.com/naggie/dstask/releases/download/v%s/%s" $v $assetName }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+ASSET_NAME={{ $assetName | quote }}
+ASSET_URL={{ $assetURL | quote }}
+EXPECTED_SHA={{ $sha | quote }}
+INSTALL_PATH={{ joinPath .chezmoi.homeDir ".local" "bin" "dstask" | quote }}
+
+if [ -z "$EXPECTED_SHA" ]; then
+  # No checksum pinned for this OS/arch in .chezmoidata/dstask.yaml. Either
+  # the upstream doesn't publish a binary for this platform or the pin is
+  # incomplete. Skip with a note rather than fail apply.
+  echo "dstask installer: no pinned checksum for $ASSET_NAME; skipping" >&2
+  exit 0
+fi
+
+# Idempotency guard. `run_onchange_` already skips when the rendered script
+# is unchanged; this covers manual re-runs when the binary is already current.
+if [ -x "$INSTALL_PATH" ] && "$INSTALL_PATH" version 2>/dev/null | grep -qF "$VERSION"; then
+  echo "dstask installer: $VERSION already installed at $INSTALL_PATH" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$INSTALL_PATH")"
+
+tmp_binary=$(mktemp)
+trap 'rm -f "$tmp_binary"' EXIT
+
+echo "dstask installer: downloading $ASSET_URL" >&2
+curl -fsSL -o "$tmp_binary" "$ASSET_URL"
+
+actual=$(sha256sum "$tmp_binary" | awk '{print $1}')
+if [ "$EXPECTED_SHA" != "$actual" ]; then
+  echo "dstask installer: checksum mismatch for $ASSET_NAME" >&2
+  echo "  expected: $EXPECTED_SHA" >&2
+  echo "  actual:   $actual" >&2
+  exit 1
+fi
+
+chmod u+x "$tmp_binary"
+mv "$tmp_binary" "$INSTALL_PATH"
+echo "dstask installer: $VERSION installed to $INSTALL_PATH" >&2
