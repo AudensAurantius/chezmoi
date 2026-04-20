@@ -1,0 +1,25 @@
+{
+  "extraKnownMarketplaces": {
+    "thedotmack": {
+      "source": {
+        "source": "github",
+        "repo": "thedotmack/claude-mem"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "claude-mem@thedotmack": true
+  },
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "timew | head -1 | grep -q '^Tracking' && echo '⚠ timew still tracking — bd-timew stop if done' || true"
+          }
+        ]
+      }
+    ]
+  }
+}
