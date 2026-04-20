@@ -1,0 +1,14 @@
+## Atlassian instance
+
+- Cloud hostname: `{{ .atlassian.boco.cloudHostname }}`
+- Cloud ID: `{{ .atlassian.boco.cloudId }}`
+
+## Team member account IDs
+
+| Display Name | Account ID | Email | Aliases |
+|---|---|---|---|
+{{- range .atlassian.boco.team }}
+| {{ .name }} | `{{ .id }}` | {{ .email }} | {{ join ", " .aliases }} |
+{{- end }}
+
+Add new IDs to `.chezmoidata/atlassian.yaml` as discovered via `mcp__claude_ai_Atlassian__lookupJiraAccountId` or extracted from ticket data.

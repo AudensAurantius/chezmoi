@@ -1,0 +1,39 @@
+# Atlassian (Jira/Confluence) data per engagement.
+# Consumed by dot_claude/agents/jira-comment-drafter.md.tmpl and the
+# atlassian-boco-context chezmoi template snippet.
+#
+# Note: .chezmoidata files cannot be templated (per chezmoi docs), so any
+# dynamic host/lookup decisions belong in .chezmoi.yml.tmpl or a
+# .chezmoitemplates/ snippet. This file is pure static data.
+
+atlassian:
+  boco:
+    cloudId: "80b04637-628f-4df2-8bfa-012de201c08c"
+    cloudHostname: "boldorange.atlassian.net"
+    # Team member account IDs. Ordered list (map iteration order is
+    # non-deterministic in Go templates; list iteration is stable).
+    team:
+      - name: "Carter Bayne"
+        id: "712020:b64c49a6-09b0-491b-b77a-8d770f7ed0d8"
+        email: "cbayne@boldorange.com"
+        aliases: ["Carter"]
+      - name: "Erick Hamness"
+        id: "60dcb3ed7261900068624f12"
+        email: "ehamness@boldorange.com"
+        aliases: ["Erick"]
+      - name: "Joanna Cullen"
+        id: "712020:e21d6420-5609-4bcc-91bd-938d130d9128"
+        email: "jcullen@boldorange.com"
+        aliases: ["Joanna"]
+      - name: "Michael Haynes"
+        id: "712020:067a243b-fbe5-44ed-97ae-281ab673a636"
+        email: "mhaynes@boldorange.com"
+        aliases: ["Mike", "Michael"]
+      - name: "Taylor Ganser"
+        id: "712020:648f70e5-077b-4a2a-aa46-af775b168e16"
+        email: "tganser@boldorange.com"
+        aliases: ["Taylor"]
+      - name: "Yan Sheng Bong"
+        id: "712020:066cc9a8-ca7b-4906-b180-96b4a5793526"
+        email: "ybong@boldorange.com"
+        aliases: ["Yan Sheng", "YS"]
