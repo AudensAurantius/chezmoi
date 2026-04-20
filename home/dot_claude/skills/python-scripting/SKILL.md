@@ -64,20 +64,25 @@ def get_cli_arguments() -> argparse.Namespace:
 ## Logging (not `print` for diagnostics)
 
 - **`logging` module**, not `print`, for progress, warnings, and errors. `print` is reserved for script *output* (data written to stdout for pipes).
-- Configure once in `main()` from the resolved `--loglevel`:
+- **Use `rich.logging.RichHandler`** instead of `logging.basicConfig`. It gives you colorized levels, readable tracebacks, and proper stderr routing with no format-string boilerplate.
+- Module-level `logger = getLogger(__name__)`. Configure once in `main()` via a small `setup_logger()` helper called after argparse:
 
 ```python
-import logging
+from logging import getLogger
+from rich.logging import RichHandler
 
-logging.basicConfig(
-    level=args.loglevel,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
-log = logging.getLogger(__name__)
+logger = getLogger(__name__)
+
+
+def setup_logger(args: argparse.Namespace) -> None:
+    handler = RichHandler(level=args.loglevel)
+    logger.addHandler(handler)
+    logger.setLevel(args.loglevel)
 ```
 
-- For richer local output, `rich.logging.RichHandler` is a drop-in replacement (see `get_snowflake_procs.py`).
-- **Never mix streams.** Data → stdout via `print`. Diagnostics → stderr via `log.info` / `log.warning` / `log.error`.
+Canonical shape: `snowflake_migrations/scripts/get_snowflake_procs.py` (`setup_logger` at line 842).
+
+- **Never mix streams.** Data → stdout via `print`. Diagnostics → stderr via `logger.info` / `logger.warning` / `logger.error`.
 
 ## Credentials
 
