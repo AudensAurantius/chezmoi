@@ -1,0 +1,29 @@
+{
+  "$schema": "https://www.schemastore.org/claude-code-keybindings.json",
+  "$docs": "https://code.claude.com/docs/en/keybindings",
+  "bindings": [
+    {
+      "context": "Autocomplete",
+      "bindings": {
+        "ctrl+p": "autocomplete:previous",
+        "ctrl+n": "autocomplete:next"
+      }
+    },
+    {
+      "context": "DiffDialog",
+      "bindings": {
+        "h": "diff:previousSource",
+        "l": "diff:nextSource",
+        "k": "diff:previousFile",
+        "j": "diff:nextFile"
+      }
+    },
+    {
+      "context": "Attachments",
+      "bindings": {
+        "h": "attachments:previous",
+        "l": "attachments:next"
+      }
+    }
+  ]
+}
