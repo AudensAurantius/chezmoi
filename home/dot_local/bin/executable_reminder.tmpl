@@ -1,0 +1,166 @@
+{{ if and (.chezmoi.kernel.osrelease | lower | contains "wsl") (lookPath "cmd.exe") -}}
+#!/usr/bin/env bash
+# reminder: schedule a Windows toast notification via systemd transient timer.
+#
+# Usage:
+#   reminder --in <duration> [notify-flags] <title> [body]
+#   reminder --at <calendar> [notify-flags] <title> [body]
+#   reminder --every <duration> [notify-flags] <title> [body]
+#   reminder --list
+#   reminder --stop <unit-name>
+#
+# Duration format: 10m, 1h30m, 90s, 2h
+# Calendar format: systemd OnCalendar spec — 14:00, "Mon 09:00", "*-*-* 14:00:00"
+# Every:           creates a persistent background loop; stop with --stop <name>
+#
+# Notify flags passed through to wsl-notify-send:
+#   --scenario <default|reminder|alarm|incomingCall>
+#   --group <id>
+#   --image <windows-path>
+#   --button <label=action>
+
+set -euo pipefail
+
+usage() {
+    cat >&2 <<'EOF'
+usage: reminder --in <duration>   <title> [body]   (e.g. --in 10m)
+       reminder --at <calendar>   <title> [body]   (e.g. --at 14:00)
+       reminder --every <duration> <title> [body]  (e.g. --every 90m)
+       reminder --list
+       reminder --stop <unit-name>
+
+Notify flags (optional, before title):
+  --scenario <default|reminder|alarm|incomingCall>
+  --group <id>
+  --image <windows-path>
+  --button <label=action>   (repeatable)
+EOF
+    exit 1
+}
+
+# ── Parse duration string to seconds ─────────────────────────────────────────
+
+parse_duration() {
+    local dur="$1" total=0 num=""
+    local i c
+    for (( i=0; i<${#dur}; i++ )); do
+        c="${dur:$i:1}"
+        if [[ "$c" =~ [0-9] ]]; then
+            num="${num}${c}"
+        else
+            case "$c" in
+                h) total=$(( total + num * 3600 )); num="" ;;
+                m) total=$(( total + num * 60  )); num="" ;;
+                s) total=$(( total + num        )); num="" ;;
+                *) echo "reminder: unknown duration unit '${c}' in '${dur}'" >&2; exit 1 ;;
+            esac
+        fi
+    done
+    [[ -n "$num" ]] && total=$(( total + num ))  # bare number → seconds
+    if [[ "$total" -le 0 ]]; then
+        echo "reminder: duration must be > 0" >&2; exit 1
+    fi
+    echo "$total"
+}
+
+# ── Argument parsing ──────────────────────────────────────────────────────────
+
+mode=""         # in | at | every | list | stop
+schedule_arg="" # duration string or calendar spec or unit name for --stop
+notify_flags=() # accumulated flags to pass to wsl-notify-send
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --in)       mode="in";    schedule_arg="$2"; shift 2 ;;
+        --at)       mode="at";    schedule_arg="$2"; shift 2 ;;
+        --every)    mode="every"; schedule_arg="$2"; shift 2 ;;
+        --list)     mode="list";  shift ;;
+        --stop)     mode="stop";  schedule_arg="$2"; shift 2 ;;
+        # Notify flags — collect for passthrough
+        --scenario|--group|--image|--header)
+                    notify_flags+=("$1" "$2"); shift 2 ;;
+        --button)   notify_flags+=("$1" "$2"); shift 2 ;;
+        --)         shift; break ;;
+        -*)         echo "reminder: unknown flag: $1" >&2; usage ;;
+        *)          break ;;
+    esac
+done
+
+# ── --list and --stop ─────────────────────────────────────────────────────────
+
+if [[ "$mode" == "list" ]]; then
+    echo "Active reminder units:"
+    systemctl --user list-units --no-legend 'reminder-*' 2>/dev/null \
+        | awk '{print "  " $1}' \
+        || echo "  (none)"
+    exit 0
+fi
+
+if [[ "$mode" == "stop" ]]; then
+    systemctl --user stop "${schedule_arg}"
+    echo "reminder: stopped ${schedule_arg}"
+    exit 0
+fi
+
+# ── Title and body ────────────────────────────────────────────────────────────
+
+[[ $# -eq 0 ]] && usage
+title="$1"
+body="${2:-}"
+shift; shift 2>/dev/null || true
+
+[[ -z "$mode" ]] && usage
+
+# Default notify_flags: scenario=reminder if none set by caller
+has_scenario=false
+for f in "${notify_flags[@]+"${notify_flags[@]}"}"; do
+    [[ "$f" == "--scenario" ]] && has_scenario=true && break
+done
+"$has_scenario" || notify_flags=("--scenario" "reminder" "${notify_flags[@]+"${notify_flags[@]}"}")
+
+# ── Build wsl-notify-send invocation ─────────────────────────────────────────
+
+notifier="wsl-notify-send"
+if ! command -v "$notifier" >/dev/null 2>&1; then
+    echo "reminder: $notifier not found on PATH" >&2
+    exit 1
+fi
+
+# Construct the command string for systemd-run.
+# Use printf %q to shell-escape each argument safely.
+notify_cmd="$notifier"
+for f in "${notify_flags[@]+"${notify_flags[@]}"}"; do
+    notify_cmd="${notify_cmd} $(printf '%q' "$f")"
+done
+notify_cmd="${notify_cmd} $(printf '%q' "$title")"
+[[ -n "$body" ]] && notify_cmd="${notify_cmd} $(printf '%q' "$body")"
+
+# ── Schedule ──────────────────────────────────────────────────────────────────
+
+unit_name="reminder-$(date +%s)"
+
+case "$mode" in
+    in)
+        secs="$(parse_duration "$schedule_arg")"
+        systemd-run --user --unit="${unit_name}" \
+            --on-active="${secs}" \
+            bash -c "$notify_cmd"
+        echo "reminder: fires in ${schedule_arg} (unit: ${unit_name})"
+        ;;
+    at)
+        systemd-run --user --unit="${unit_name}" \
+            --on-calendar="${schedule_arg}" \
+            bash -c "$notify_cmd"
+        echo "reminder: fires at '${schedule_arg}' (unit: ${unit_name})"
+        ;;
+    every)
+        secs="$(parse_duration "$schedule_arg")"
+        # Persistent background loop — fires immediately on start, then every N seconds.
+        # Stop with: reminder --stop <unit-name>  OR  systemctl --user stop <unit-name>
+        systemd-run --user --unit="${unit_name}" \
+            bash -c "while true; do ${notify_cmd}; sleep ${secs}; done"
+        echo "reminder: recurring every ${schedule_arg} (unit: ${unit_name})"
+        echo "  stop with: reminder --stop ${unit_name}"
+        ;;
+esac
+{{- end }}

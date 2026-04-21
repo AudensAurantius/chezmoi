@@ -13,7 +13,8 @@ if timew | head -1 | grep -q '^Tracking'; then
     tags="$(timew | head -1 | sed 's/^Tracking //')"
     timew stop
     if command -v {{ .notifier }} >/dev/null 2>&1; then
-        {{ .notifier }} "timew auto-stop" "stopped interval at $(date +%H:%M): ${tags}"
+        {{ .notifier }} --scenario reminder --group timew-autostop \
+            "timew auto-stop" "stopped interval at $(date +%H:%M): ${tags}"
     fi
 fi
 {{- end }}

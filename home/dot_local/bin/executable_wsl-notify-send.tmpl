@@ -1,32 +1,132 @@
 {{ if and (.chezmoi.kernel.osrelease | lower | contains "wsl") (lookPath "cmd.exe") -}}
 #!/usr/bin/env bash
-# wsl-notify-send: WSL2 shim that routes to wsl-notify-send.exe on Windows.
+# wsl-notify-send: WSL2 notification shim.
 #
-# WSL2's D-Bus session registers org.freedesktop.Notifications as activatable
-# but has no running daemon, so stock `notify-send` blocks indefinitely. This
-# wrapper calls the Windows-side wsl-notify-send.exe instead, which raises
-# a native Windows toast via the Win32 toast API.
+# Uses BurntToast (PowerShell) when installed — supports rich flags (scenario,
+# group/replace, image, header, buttons). Falls back to wsl-notify-send.exe
+# for basic title+body toasts when BurntToast is absent.
 #
-# The exe path is resolved at runtime from %USERPROFILE% so it tracks the
-# actual Windows user rather than hardcoding a name. The exe itself lives
-# at %USERPROFILE%\bin\wsl-notify-send.exe — update INSTALL_SUBPATH if you
-# move it. Installation: see J121 memory feedback-time-tracking.md.
+# Usage: wsl-notify-send [flags] <title> [body]
+#
+# Flags:
+#   --scenario <default|reminder|alarm|incomingCall>
+#   --group <id>             same id replaces rather than stacks toasts
+#   --image <windows-path>   image displayed in the toast
+#   --header <id=title>      conversation header grouping
+#   --button <label=action>  action button; action: dismiss | snooze | <url>
+#                            repeatable; multiple --button flags are cumulative
+#
+# Installation of wsl-notify-send.exe (fallback):
+#   See J121 memory feedback-time-tracking.md — exe lives at %USERPROFILE%\bin\
 
 set -euo pipefail
 
 INSTALL_SUBPATH="bin/wsl-notify-send.exe"
 
+# ── Flag parsing ──────────────────────────────────────────────────────────────
+
+scenario="Default"
+group=""
+image=""
+header=""
+buttons=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --scenario) scenario="$2"; shift 2 ;;
+        --group)    group="$2";    shift 2 ;;
+        --image)    image="$2";    shift 2 ;;
+        --header)   header="$2";   shift 2 ;;
+        --button)   buttons+=("$2"); shift 2 ;;
+        --)         shift; break ;;
+        -*)         echo "wsl-notify-send: unknown flag: $1" >&2; exit 1 ;;
+        *)          break ;;
+    esac
+done
+
+title="${1:-notification}"
+body="${2:-}"
+
+# ── Resolve Windows USERPROFILE ───────────────────────────────────────────────
+
 WINPROFILE="$(wslpath "$(cmd.exe /C 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')")"
+
+# ── BurntToast availability (filesystem check — no powershell.exe call) ──────
+
+burnttoast_available=false
+for bt_path in \
+    "${WINPROFILE}/Documents/WindowsPowerShell/Modules/BurntToast" \
+    "${WINPROFILE}/Documents/PowerShell/Modules/BurntToast"; do
+    if [ -d "$bt_path" ]; then
+        burnttoast_available=true
+        break
+    fi
+done
+
+# ── BurntToast backend ────────────────────────────────────────────────────────
+
+if [ "$burnttoast_available" = true ]; then
+    # Encode multiple buttons as a pipe-separated string: "Label1=action1|Label2=action2"
+    buttons_env=""
+    for btn in "${buttons[@]+"${buttons[@]}"}"; do
+        buttons_env="${buttons_env:+${buttons_env}|}${btn}"
+    done
+
+    NOTIFY_TITLE="$title" \
+    NOTIFY_BODY="$body" \
+    NOTIFY_SCENARIO="$scenario" \
+    NOTIFY_GROUP="$group" \
+    NOTIFY_IMAGE="$image" \
+    NOTIFY_HEADER="$header" \
+    NOTIFY_BUTTONS="$buttons_env" \
+    powershell.exe -NoProfile -NonInteractive -Command '
+        Import-Module BurntToast -ErrorAction Stop
+
+        $text = [System.Collections.ArrayList]@($env:NOTIFY_TITLE)
+        if ($env:NOTIFY_BODY) { [void]$text.Add($env:NOTIFY_BODY) }
+
+        $params = @{ Text = $text.ToArray(); Scenario = $env:NOTIFY_SCENARIO }
+
+        if ($env:NOTIFY_GROUP)  { $params.UniqueIdentifier = $env:NOTIFY_GROUP }
+        if ($env:NOTIFY_IMAGE)  { $params.AppLogo = $env:NOTIFY_IMAGE }
+
+        if ($env:NOTIFY_HEADER) {
+            $parts = $env:NOTIFY_HEADER -split "=", 2
+            $hId    = $parts[0]
+            $hTitle = if ($parts.Count -gt 1) { $parts[1] } else { $parts[0] }
+            $params.Header = New-BTHeader -Id $hId -Title $hTitle
+        }
+
+        if ($env:NOTIFY_BUTTONS) {
+            $btns = @()
+            foreach ($spec in ($env:NOTIFY_BUTTONS -split "\|")) {
+                $bParts  = $spec -split "=", 2
+                $bLabel  = $bParts[0]
+                $bAction = if ($bParts.Count -gt 1) { $bParts[1] } else { "dismiss" }
+                if ($bAction -eq "dismiss") {
+                    $btns += New-BTButton -Content $bLabel -Dismiss
+                } elseif ($bAction -eq "snooze") {
+                    $btns += New-BTButton -Content $bLabel -Snooze
+                } else {
+                    $btns += New-BTButton -Content $bLabel -Arguments $bAction
+                }
+            }
+            $params.Button = $btns
+        }
+
+        New-BurntToastNotification @params
+    ' 2>/dev/null && exit 0
+    # fall through on powershell error (e.g. module missing despite dir check)
+fi
+
+# ── wsl-notify-send.exe fallback ──────────────────────────────────────────────
+
 WNS_EXE="${WINPROFILE}/${INSTALL_SUBPATH}"
 
 if [ ! -x "$WNS_EXE" ]; then
     echo "wsl-notify-send: $WNS_EXE not found or not executable" >&2
     exit 1
 fi
-
-title="${1:-notification}"
-shift || true
-body="$*"
 
 if [ -n "$body" ]; then
     msg="${title}: ${body}"

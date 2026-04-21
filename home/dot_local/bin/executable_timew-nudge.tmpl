@@ -12,7 +12,8 @@ set -euo pipefail
 if timew | head -1 | grep -q '^Tracking'; then
     tags="$(timew | head -1 | sed 's/^Tracking //')"
     if command -v {{ .notifier }} >/dev/null 2>&1; then
-        {{ .notifier }} "timew still tracking" "running: ${tags} — bd-timew stop if you're done"
+        {{ .notifier }} --scenario reminder --group timew-nudge \
+            "timew still tracking" "running: ${tags} — bd-timew stop if you're done"
     fi
 fi
 {{- end }}

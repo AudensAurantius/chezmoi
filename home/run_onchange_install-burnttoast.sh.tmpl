@@ -1,0 +1,31 @@
+{{ if and (.chezmoi.kernel.osrelease | lower | contains "wsl") (lookPath "cmd.exe") -}}
+#!/bin/sh
+# run_onchange_install-burnttoast.sh.tmpl — install BurntToast PowerShell module.
+#
+# BurntToast v1.0.1 — bump this version comment to force re-run on next chezmoi apply.
+#
+# Installs via Install-Module from PSGallery into CurrentUser scope.
+# Idempotent: skips if the module is already present.
+# WSL2 only — no-op on non-WSL systems.
+
+set -eu
+
+if ! command -v powershell.exe >/dev/null 2>&1; then
+  echo "install-burnttoast: powershell.exe not on PATH; skipping" >&2
+  exit 0
+fi
+
+echo "install-burnttoast: checking for BurntToast..." >&2
+
+powershell.exe -NoProfile -NonInteractive -Command '
+  if (Get-Module -ListAvailable -Name BurntToast) {
+    Write-Host "install-burnttoast: already installed"
+  } else {
+    Write-Host "install-burnttoast: ensuring NuGet provider..."
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser | Out-Null
+    Write-Host "install-burnttoast: installing BurntToast from PSGallery..."
+    Install-Module -Name BurntToast -Force -Scope CurrentUser -SkipPublisherCheck
+    Write-Host "install-burnttoast: done"
+  }
+' 2>&1
+{{- end }}
