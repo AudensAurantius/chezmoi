@@ -32,4 +32,21 @@ fzf:
     linux_arm64:  "98b7d322efae9c37e4bfbbab1cbcd8722eb742d9399511f96375feb40cc35d1d"
     darwin_amd64: "144e98ee6bcffaf915366162768000561cd2db8fb53b119d73110391a8e5b5f0"
     darwin_arm64: "02dfb11de8773cb79aa4fc5bfc77e75c6604ee14728bc849fc162dd91a9714c4"
+  # keybindings:
+  #   # Bind in multiple keymaps — expands to three `bindkey -M <map> ...`
+  #   # lines, one per keymap in the list.
+  #   - key: "^X^F"
+  #     widget: fzf-file-widget
+  #     keymaps: [emacs, vicmd, viins]
+  #
+  #   # Alt-key example. Use \e prefix for meta/alt; YAML requires a
+  #   # double-backslash since \e is not a standard YAML escape sequence.
+  #   - key: "\\eg"
+  #     widget: fzf-cd-widget
+  #     keymaps: [emacs]
+  #
+  #   # Omit keymaps to bind in the current/default keymap only
+  #   # (emits `bindkey "<key>" <widget>` with no -M flag).
+  #   - key: "^X^Q"
+  #     widget: some-custom-widget
   keybindings: []
