@@ -1,0 +1,30 @@
+#!/bin/sh
+# chezmoi modify_ script: surgically set managed keys in ~/.claude/settings.json.
+# Claude Code mutates this file at runtime (model, effortLevel, plugin state, etc.)
+# — those keys are intentionally left untouched so /model and similar commands
+# survive a chezmoi apply.
+#
+# Managed keys (always overwritten with the values below):
+#   hooks, enabledPlugins, extraKnownMarketplaces
+#
+# Guards:
+#   1. jq must be on PATH; if missing, pass stdin through unchanged.
+#   2. Empty stdin → emit '{}' as a safe bootstrap base.
+
+set -eu
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "modify_settings.json: jq not on PATH; leaving ~/.claude/settings.json unchanged" >&2
+  exec cat
+fi
+
+input="$(cat)"
+[ -z "$input" ] && input='{}'
+
+cmd="timew | head -1 | grep -q '^Tracking' && echo '⚠ timew still tracking — bd-timew stop if done' || true"
+
+printf '%s\n' "$input" | jq \
+  --arg cmd "$cmd" \
+  '.hooks = {"SessionEnd": [{"hooks": [{"type": "command", "command": $cmd}]}]} |
+   .enabledPlugins = {"claude-mem@thedotmack": true} |
+   .extraKnownMarketplaces = {"thedotmack": {"source": {"source": "github", "repo": "thedotmack/claude-mem"}}}'
