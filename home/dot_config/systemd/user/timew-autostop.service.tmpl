@@ -1,9 +1,9 @@
-{{ if and (lookPath "timew") (lookPath "timew-autostop") -}}
+{{ if lookPath "timew" -}}
 [Unit]
 Description=Stop any running Timewarrior interval (end-of-day safety net)
 Documentation=file://%h/.local/share/chezmoi/home/dot_local/bin/executable_timew-autostop.tmpl
 
 [Service]
 Type=oneshot
-ExecStart=%h{{ trimPrefix .chezmoi.homeDir (lookPath "timew-autostop") }}
+ExecStart=%h{{ trimPrefix .chezmoi.homeDir (output "chezmoi" "target-path" (joinPath .chezmoi.sourceDir "dot_local/bin/executable_timew-autostop.tmpl") | trim) }}
 {{- end }}

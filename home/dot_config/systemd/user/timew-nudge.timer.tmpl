@@ -1,4 +1,4 @@
-{{ if and (lookPath "timew") (lookPath "timew-nudge") -}}
+{{ if lookPath "timew" -}}
 [Unit]
 Description=Daily Timewarrior nudge at 22:30
 

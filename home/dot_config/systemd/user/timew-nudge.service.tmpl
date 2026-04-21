@@ -1,9 +1,9 @@
-{{ if and (lookPath "timew") (lookPath "timew-nudge") -}}
+{{ if lookPath "timew" -}}
 [Unit]
 Description=Notify if a Timewarrior interval is still running near bedtime
 Documentation=file://%h/.local/share/chezmoi/home/dot_local/bin/executable_timew-nudge.tmpl
 
 [Service]
 Type=oneshot
-ExecStart=%h{{ trimPrefix .chezmoi.homeDir (lookPath "timew-nudge") }}
+ExecStart=%h{{ trimPrefix .chezmoi.homeDir (output "chezmoi" "target-path" (joinPath .chezmoi.sourceDir "dot_local/bin/executable_timew-nudge.tmpl") | trim) }}
 {{- end }}

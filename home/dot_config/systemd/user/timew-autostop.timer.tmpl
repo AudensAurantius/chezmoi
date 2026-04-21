@@ -1,4 +1,4 @@
-{{ if and (lookPath "timew") (lookPath "timew-autostop") -}}
+{{ if lookPath "timew" -}}
 [Unit]
 Description=Daily Timewarrior safety-net auto-stop at 23:59
 
