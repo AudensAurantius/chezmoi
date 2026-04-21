@@ -8,6 +8,10 @@ timestamps:
   - action: created
     at: 2026-04-20T05:15:24-05:00
     actor: Michael Haynes
+  - action: updated
+    at: 2026-04-21T12:30:00-05:00
+    actor: Michael Haynes
+    note: "Added argument-hint to step 5a required fields and metadata invariant"
 comments:
   - "Source: J121-9kp.2.6 meta-tooling wave 2 discussion (2026-04-20). First of three /add-* commands; the pattern-exemplar for /add-skill and /add-agent."
   - "Motivation: the project had accumulated enough ad-hoc slash commands that authoring-friction was worth formalizing. Prerequisite for the broader /add-*, /edit-*, /remove-* CRUD family."
@@ -108,6 +112,10 @@ Mutually exclusive groups:
     - `description` — one-line purpose. The registry uses this verbatim, so
       write it to stand alone (no `/<name> —` prefix). Should convey the
       same purpose as the H1 in different words.
+    - `argument-hint` — the argument signature shown in tab-completion and
+      `/resolve` output (e.g., `"<bead-id> | --jira <JIRA-KEY>"`). Set to
+      `""` explicitly when the command takes no arguments — omission looks
+      identical to forgetting it, so explicit is always better.
     - `author` — `--author` flag value if provided, else
       `git config user.name`.
     - `scope` — `global` or `local`, matching the destination from step 3.
@@ -166,7 +174,8 @@ Mutually exclusive groups:
 - Name must not contain `/`, `..`, or whitespace. Lowercase with hyphens is
   convention.
 - **Every new command ships with metadata frontmatter.** `name`,
-  `description`, `author`, `scope`, `tags`, `timestamps` (one `created`
+  `description`, `argument-hint` (set to `""` if the command takes no
+  arguments), `author`, `scope`, `tags`, `timestamps` (one `created`
   entry), and a `comments` array with source/motivation/projected-use
   bullets. Missing metadata is a halt condition, not a warning.
 - **H1 follows the canonical format** `# /<name> — <purpose>`. The H1 and

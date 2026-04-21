@@ -1,6 +1,7 @@
 ---
 name: stop
 description: Stop the current Timewarrior interval without changing any bead's status
+argument-hint: ""
 author: Michael Haynes
 scope: global
 tags: [time-tracking, timewarrior]
@@ -8,6 +9,10 @@ timestamps:
   - action: created
     at: 2026-04-20T00:35:06-05:00
     actor: Michael Haynes
+  - action: updated
+    at: 2026-04-21T12:30:00-05:00
+    actor: Michael Haynes
+    note: "Added argument-hint: \"\" (no-argument command; consistency pass)"
 comments:
   - "Source: J121-9kp.1 Wave 1 time-tracking bundle (2026-04-20). Companion to /start, /switch, /status."
   - "Motivation: breaks, end-of-day, context-switching to non-bead work all need a clean timer stop. Independent of bead status so that in-progress beads stay in-progress when the user steps away."
