@@ -165,6 +165,10 @@ Mutually exclusive groups:
 - **Prefer `timestamps[].note` over new comments for mechanical changes.**
   The comments array is reserved for substantive shifts in purpose,
   scope, or motivation — not for every bug fix.
+- **Always update `argument-hint` when flags change.** If an edit adds,
+  removes, or renames any flag or positional argument, the `argument-hint`
+  field must be updated in the same edit to reflect the new interface.
+  An out-of-date `argument-hint` is a usage-documentation bug.
 - **Never commit.** Chezmoi repo hygiene is the user's call.
 - **Halt if the command doesn't exist.** Suggest `/add-command` and stop.
 - **H1 and `description` should co-vary.** If an edit changes one, it
