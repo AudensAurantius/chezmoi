@@ -1,0 +1,27 @@
+# Pinned rano release, consumed by run_onchange_install-rano.sh.tmpl.
+#
+# rano (https://github.com/Dicklesworthstone/rano) is a network observer for AI
+# CLI processes. Deployed as a PoC for BOCO AI governance / telemetry; see
+# bd memories rano-adoption-counter-rationale for the decision trail.
+#
+# BUILD-FROM-SOURCE PATH: upstream v0.1.0 ships only glibc-2.39 binaries, which
+# fail to run on Debian 12 (glibc 2.36, this host's baseline). The installer
+# uses `cargo install --git ... --tag` instead of downloading prebuilt tarballs
+# so the build matches the local glibc. Cargo.lock upstream provides the
+# per-crate supply-chain verification that the prebuilt SHA256s would have.
+#
+# LICENSE NOTE: upstream LICENSE has an MIT-with-rider restricting OpenAI,
+# Anthropic, and entities acting on their behalf — same rider as bv. Risk
+# accepted for personal-tooling scope (bd memories
+# beads-viewer-license-risk-accepted applies by analogy, and
+# rano-adoption-counter-rationale documents the specific PoC override).
+#
+# To bump:
+#   1. version: upstream tag stripped of "v"
+#   2. commit — installer re-runs on next chezmoi apply.
+#      `cargo install` is idempotent for the same --tag; rebuild only happens
+#      if the tag changes (or if ~/.cargo/registry state mutates).
+
+rano:
+  version: "0.1.0"
+  repo_url: "https://github.com/Dicklesworthstone/rano.git"

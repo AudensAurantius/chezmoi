@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# rano-weekly-report — generate + email the weekly rano activity summary.
+#
+# Invoked by rano-weekly-report.service (timer-driven). Always writes the
+# report to ~/.local/share/rano/reports/rano-report-<YYYY-MM-DD>.md as a
+# safety net; attempts email delivery via `mail` but exits 0 either way
+# so a mail failure doesn't flap the systemd timer status.
+#
+# Email recipient defaults to mhaynes@boldorange.com (per the rano
+# adoption plan, see bd memories rano-adoption-counter-rationale).
+# Override via the RANO_REPORT_EMAIL env var. Set RANO_REPORT_EMAIL=""
+# to disable email entirely (report still saved to disk).
+#
+# Email requires a working local MTA. msmtp is installed but not
+# configured on this host — if delivery fails, the failure is logged to
+# stderr and the report file path is reported so the user can cat|mail
+# manually or configure msmtp later.
+
+set -euo pipefail
+
+RANO_BIN="{{ .chezmoi.homeDir }}/.local/bin/rano"
+SQLITE_PATH="{{ .chezmoi.homeDir }}/.local/share/rano/observer.sqlite"
+REPORT_DIR="{{ .chezmoi.homeDir }}/.local/share/rano/reports"
+RECIPIENT="${RANO_REPORT_EMAIL-mhaynes@boldorange.com}"
+TODAY=$(date +%Y-%m-%d)
+WEEK_AGO=$(date -d '7 days ago' +%Y-%m-%d)
+REPORT_FILE="$REPORT_DIR/rano-report-${TODAY}.md"
+
+mkdir -p "$REPORT_DIR"
+
+if [ ! -x "$RANO_BIN" ]; then
+  echo "rano-weekly-report: $RANO_BIN not found; aborting" >&2
+  exit 1
+fi
+
+# ── systemd service stats ──────────────────────────────────────────────────
+svc_show() {
+  systemctl --user show rano-monitor.service -p "$1" --value 2>/dev/null || true
+}
+
+cpu_nsec=$(svc_show CPUUsageNSec)
+active_enter=$(svc_show ActiveEnterTimestamp)
+restart_count=$(svc_show NRestarts)
+active_state=$(svc_show ActiveState)
+
+# CPUUsageNSec comes as [not set] or a nanosecond count. Normalize.
+if [ -z "$cpu_nsec" ] || [ "$cpu_nsec" = "[not set]" ]; then
+  cpu_seconds="n/a"
+  cpu_avg_pct="n/a"
+else
+  cpu_seconds=$(awk -v n="$cpu_nsec" 'BEGIN{printf "%.2f", n/1e9}')
+  if [ -n "$active_enter" ] && [ "$active_enter" != "n/a" ]; then
+    start_epoch=$(date -d "$active_enter" +%s 2>/dev/null || echo 0)
+    now_epoch=$(date +%s)
+    elapsed=$(( now_epoch - start_epoch ))
+    if [ "$elapsed" -gt 0 ]; then
+      cpu_avg_pct=$(awk -v c="$cpu_seconds" -v e="$elapsed" 'BEGIN{printf "%.3f", (c/e)*100}')
+    else
+      cpu_avg_pct="n/a"
+    fi
+  else
+    cpu_avg_pct="n/a"
+  fi
+fi
+
+# Uptime as human-readable — `systemctl status` has it pre-formatted.
+# Extract the "since ..." portion only so it fits in a table cell cleanly.
+uptime_raw=$(systemctl --user status rano-monitor.service 2>/dev/null \
+  | grep -E "^\s*Active:" | head -1 | sed 's/^ *//' || echo "")
+uptime_since=$(echo "$uptime_raw" | sed -n 's/.*since //p')
+if [ -z "$uptime_since" ]; then
+  uptime_since="unknown"
+fi
+
+# ── SQLite database size ───────────────────────────────────────────────────
+if [ -f "$SQLITE_PATH" ]; then
+  db_size_bytes=$(stat -c %s "$SQLITE_PATH" 2>/dev/null || echo 0)
+  db_size_human=$(numfmt --to=iec --format '%.1f' "$db_size_bytes" 2>/dev/null || echo "$db_size_bytes bytes")
+else
+  db_size_human="(not yet created)"
+fi
+
+# ── rano report body ───────────────────────────────────────────────────────
+report_body=$("$RANO_BIN" report --since 7d --sqlite "$SQLITE_PATH" 2>&1 \
+  || echo "_(rano report failed — see stderr in systemd journal: journalctl --user -u rano-weekly-report)_")
+
+# ── Assemble the Markdown report ───────────────────────────────────────────
+cat > "$REPORT_FILE" <<EOF
+# rano Weekly Report — ${WEEK_AGO} through ${TODAY}
+
+**Host:** $(hostname) · **Generated:** $(date -Iseconds) · **Recipient:** ${RECIPIENT:-(email disabled)}
+
+## Daemon health
+
+| Metric             | Value |
+|--------------------|-------|
+| Service state      | ${active_state:-unknown} |
+| Running since      | ${uptime_since} |
+| Restarts (since boot) | ${restart_count:-0} |
+| Total CPU seconds  | ${cpu_seconds} |
+| Avg CPU (since service start) | ${cpu_avg_pct}% |
+| SQLite DB size     | ${db_size_human} |
+| SQLite DB path     | \`${SQLITE_PATH}\` |
+
+## Activity summary (last 7 days)
+
+\`\`\`
+${report_body}
+\`\`\`
+
+---
+
+_This is a personal AI governance telemetry PoC. See_
+_\`bd memories rano-adoption-counter-rationale\` for context. Report stored at_
+_\`${REPORT_FILE}\`; the systemd journal has full invocation logs via_
+_\`journalctl --user -u rano-weekly-report\`._
+EOF
+
+echo "rano-weekly-report: wrote $REPORT_FILE" >&2
+
+# ── Attempt email delivery ─────────────────────────────────────────────────
+if [ -z "$RECIPIENT" ]; then
+  echo "rano-weekly-report: RANO_REPORT_EMAIL empty; skipping email" >&2
+  exit 0
+fi
+
+if ! command -v mail >/dev/null 2>&1; then
+  echo "rano-weekly-report: 'mail' command not found; report saved to disk only" >&2
+  exit 0
+fi
+
+subject="rano weekly report — ${TODAY} ($(hostname))"
+if mail -s "$subject" "$RECIPIENT" < "$REPORT_FILE"; then
+  echo "rano-weekly-report: emailed to $RECIPIENT" >&2
+else
+  rc=$?
+  echo "rano-weekly-report: mail delivery failed (exit $rc); report still at $REPORT_FILE" >&2
+  echo "rano-weekly-report: configure msmtp or fix local MTA, then re-run:" >&2
+  echo "  mail -s \"$subject\" $RECIPIENT < $REPORT_FILE" >&2
+fi
+
+# Exit 0 regardless — report on disk is the source of truth.
+exit 0

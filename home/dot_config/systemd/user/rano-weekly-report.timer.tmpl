@@ -1,0 +1,14 @@
+{{ if and (lookPath "rano") (lookPath "rano-weekly-report") -}}
+[Unit]
+Description=Weekly rano activity report — Mondays 07:30 local
+
+[Timer]
+# Mondays at 07:30 local time. Persistent=true means missed triggers
+# (laptop off / WSL shut down) fire on next boot so a week is never skipped.
+OnCalendar=Mon *-*-* 07:30:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
+{{- end }}

@@ -1,0 +1,11 @@
+{{ if and (lookPath "rano") (lookPath "rano-weekly-report") -}}
+[Unit]
+Description=rano weekly activity report (disk, CPU, provider attribution)
+Documentation=file://%h/.local/share/chezmoi/home/dot_local/bin/executable_rano-weekly-report.tmpl
+Requires=rano-monitor.service
+After=rano-monitor.service
+
+[Service]
+Type=oneshot
+ExecStart=%h{{ trimPrefix .chezmoi.homeDir (lookPath "rano-weekly-report") }}
+{{- end }}

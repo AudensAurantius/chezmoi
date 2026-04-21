@@ -1,0 +1,28 @@
+{{ if lookPath "rano" -}}
+[Unit]
+Description=rano — network observer for AI CLI processes (BOCO AI governance PoC)
+Documentation=https://github.com/Dicklesworthstone/rano
+After=default.target
+
+[Service]
+Type=simple
+# Default mode is PTR (reverse DNS) — no elevated privileges required per
+# rano's README. We explicitly pin the SQLite path under XDG_DATA_HOME so
+# the log persists across reboots and is discoverable by the weekly-report
+# script. No --pcap flag = no CAP_NET_RAW needed.
+ExecStart=%h/.local/bin/rano --sqlite %h/.local/share/rano/observer.sqlite
+Restart=on-failure
+RestartSec=30s
+
+# Resource caps — PoC, not production; keep the blast radius small.
+MemoryMax=256M
+CPUQuota=10%
+
+# Light hardening. rano only reads /proc (same-user PIDs are readable
+# without special config on Linux) and writes to ~/.local/share/rano/.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
+{{- end }}

@@ -1,0 +1,59 @@
+#!/bin/sh
+# run_onchange_install-rano.sh.tmpl — install rano to ~/.local/bin via cargo.
+#
+# We build from source (cargo install --git ... --tag) instead of downloading
+# upstream prebuilt binaries because v0.1.0 binaries are linked against
+# glibc 2.39 which is newer than Debian 12's baseline. Source build against
+# local glibc sidesteps that entirely.
+#
+# `cargo install` is idempotent per --tag: if the target version is already
+# installed and Cargo.lock hasn't changed, rebuild is skipped.
+#
+# Version pinned in .chezmoidata/rano.yaml.
+{{- $v := .rano.version -}}
+{{- $repo := .rano.repo_url }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+REPO_URL={{ $repo | quote }}
+INSTALL_PATH={{ joinPath .chezmoi.homeDir ".local" "bin" "rano" | quote }}
+CARGO_ROOT={{ joinPath .chezmoi.homeDir ".local" | quote }}
+
+# Fail fast if cargo is missing — no fallback to prebuilt binary (glibc
+# incompatibility), and no silent success.
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "rano installer: cargo not found; install rust toolchain via rustup first" >&2
+  exit 1
+fi
+
+# Idempotency guard — probe version string. `rano --version` prints "rano <ver>".
+if [ -x "$INSTALL_PATH" ] \
+    && "$INSTALL_PATH" --version 2>/dev/null | grep -qF "$VERSION"; then
+  echo "rano installer: $VERSION already installed at $INSTALL_PATH" >&2
+  exit 0
+fi
+
+echo "rano installer: building v$VERSION from source (this may take 1-3 minutes)" >&2
+
+# --locked uses upstream Cargo.lock (reproducible deps).
+# --root puts the binary under $CARGO_ROOT/bin (= ~/.local/bin).
+# --force allows re-install over an older binary.
+cargo install \
+  --git "$REPO_URL" \
+  --tag "v$VERSION" \
+  --locked \
+  --force \
+  --root "$CARGO_ROOT" \
+  rano
+
+if [ ! -x "$INSTALL_PATH" ]; then
+  echo "rano installer: cargo install succeeded but $INSTALL_PATH not found" >&2
+  exit 1
+fi
+
+# Ensure data directory exists for the SQLite log. Creating at install time
+# keeps the systemd unit's ExecStart from tripping on a missing dir.
+mkdir -p "{{ joinPath .chezmoi.homeDir ".local" "share" "rano" "reports" }}"
+
+echo "rano installer: $VERSION installed to $INSTALL_PATH" >&2

@@ -39,4 +39,16 @@ for timer in "$HOME/.config/systemd/user/"*.timer; do
     systemctl --user enable --now "$name"
 done
 
-echo "systemd-user-reload: daemon reloaded; timers enabled."
+# Long-running services (not timer-driven). Enumerated explicitly rather than
+# auto-discovered — oneshot services (like timew-nudge) should NOT be enabled
+# here; they're invoked by their paired timers. Add a line per new daemon.
+long_running_services=(
+    rano-monitor.service
+)
+for svc in "${long_running_services[@]}"; do
+    if [ -f "$HOME/.config/systemd/user/$svc" ]; then
+        systemctl --user enable --now "$svc"
+    fi
+done
+
+echo "systemd-user-reload: daemon reloaded; timers + long-running services enabled."
