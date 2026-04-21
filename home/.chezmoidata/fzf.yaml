@@ -1,0 +1,35 @@
+# Pinned fzf release, consumed by run_onchange_install-fzf.sh.tmpl.
+# Also carries user-defined keybindings consumed by
+# snippets/fzf-integration.zsh.tmpl.
+#
+# Upstream publishes per-OS/arch tarballs and a separate checksums file:
+#   https://github.com/junegunn/fzf/releases/download/<version>/fzf_<version>_checksums.txt
+#
+# To bump:
+#   1. version: new upstream tag, "v"-prefixed
+#   2. checksums: verbatim rows from the checksums file above
+#   3. commit — rendered installer hash changes, re-install triggers.
+#
+# Keybindings notes:
+#   fzf's own `--zsh` output already binds ^T, ^R, and \ec in all three
+#   keymaps (emacs, vicmd, viins). The `keybindings:` list below is for
+#   ADDITIONAL bindings you want to add or for explicit overrides — it
+#   does NOT need to duplicate fzf's defaults.
+#
+#   Each entry has: key, widget, and (optional) keymaps list.
+#   If keymaps is omitted, the binding applies to the current keymap
+#   (i.e., `bindkey "<key>" <widget>` without -M).
+#
+#   Example:
+#     - key: "^X^F"
+#       widget: fzf-file-widget
+#       keymaps: [emacs, vicmd, viins]
+
+fzf:
+  version: "v0.71.0"
+  checksums:
+    linux_amd64:  "22639bb38489dbca8acef57850cbb50231ab714d0e8e855ac52fae8b41233df4"
+    linux_arm64:  "98b7d322efae9c37e4bfbbab1cbcd8722eb742d9399511f96375feb40cc35d1d"
+    darwin_amd64: "144e98ee6bcffaf915366162768000561cd2db8fb53b119d73110391a8e5b5f0"
+    darwin_arm64: "02dfb11de8773cb79aa4fc5bfc77e75c6604ee14728bc849fc162dd91a9714c4"
+  keybindings: []

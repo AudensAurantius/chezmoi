@@ -37,6 +37,7 @@ plugins:
       - url: OMZ::plugins/pip/pip.plugin.zsh
         ice:
           - as"completion"
-      - url: OMZ::plugins/fzf/fzf.plugin.zsh
-        ice:
-          - atload"bindkey '^R' fzf-history-widget; bindkey -M vicmd '^R' fzf-history-widget; bindkey -M viins '^R' fzf-history-widget"
+      # fzf integration moved to ~/.local/share/zsh/snippets/fzf-integration.zsh
+      # (templated from `fzf --zsh` + .chezmoidata/fzf.yaml keybindings) —
+      # avoids OMZ's path-auto-discovery which doesn't find a
+      # chezmoi-installed ~/.local/bin/fzf without companion shell/ files.

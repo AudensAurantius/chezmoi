@@ -1,0 +1,36 @@
+# fzf-integration.zsh — fzf shell integration + user-defined keybindings.
+#
+# Generated from: fzf --zsh + .chezmoidata/fzf.yaml
+#
+# The --zsh output ships fzf's widgets (fzf-history-widget, fzf-cd-widget,
+# fzf-file-widget, fzf-completion) and their default bindings in emacs,
+# vicmd, and viins keymaps. Additional user-defined bindings are appended
+# afterwards (from .chezmoidata/fzf.yaml :: fzf.keybindings).
+#
+# Bootstrap handling: on fresh installs or when the system fzf is older
+# than v0.48 (no --zsh support), the sh wrapper below swallows errors
+# and emits empty output. Chezmoi renders an empty integration file,
+# apply completes, the installer places fzf v0.71+, and a SECOND
+# `chezmoi apply` regenerates this file with real content.
+#
+# Integration and keybindings are co-located deliberately — the bindings
+# depend on widgets being defined by the --zsh output, and splitting them
+# into separate files would create a filename-ordering invariant to
+# maintain. Structural coupling here reflects the real runtime coupling.
+{{- $integration := output "sh" "-c" "command -v fzf >/dev/null 2>&1 && fzf --zsh 2>/dev/null || true" -}}
+{{- if $integration -}}
+{{ $integration }}
+{{- if .fzf.keybindings }}
+
+# ---- User-defined keybindings (from .chezmoidata/fzf.yaml) ----
+{{ range $kb := .fzf.keybindings -}}
+{{- if $kb.keymaps -}}
+{{ range $keymap := $kb.keymaps }}
+bindkey -M {{ $keymap }} {{ $kb.key | quote }} {{ $kb.widget }}
+{{- end }}
+{{- else }}
+bindkey {{ $kb.key | quote }} {{ $kb.widget }}
+{{- end }}
+{{ end -}}
+{{- end }}
+{{- end }}

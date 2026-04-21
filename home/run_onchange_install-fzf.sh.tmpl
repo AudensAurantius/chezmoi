@@ -1,0 +1,61 @@
+#!/bin/sh
+# run_onchange_install-fzf.sh.tmpl — install fzf (junegunn/fzf) to ~/.local/bin.
+#
+# Tarball-based, per-OS/arch SHA256 pinning. The tarball contains a single
+# binary named `fzf` at the root. Upstream publishes a checksums file
+# alongside release assets, so SHAs can be pulled verbatim (unlike cheat
+# where we compute locally).
+{{- $v := .fzf.version -}}
+{{- $platform := printf "%s_%s" .chezmoi.os .chezmoi.arch -}}
+{{- $vBare := trimPrefix "v" $v -}}
+{{- $assetName := printf "fzf-%s-%s.tar.gz" $vBare $platform -}}
+{{- $sha := dig $platform "" .fzf.checksums -}}
+{{- $assetURL := printf "https://github.com/junegunn/fzf/releases/download/%s/%s" $v $assetName }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+ASSET_NAME={{ $assetName | quote }}
+ASSET_URL={{ $assetURL | quote }}
+EXPECTED_SHA={{ $sha | quote }}
+INSTALL_PATH={{ joinPath .chezmoi.homeDir ".local" "bin" "fzf" | quote }}
+
+if [ -z "$EXPECTED_SHA" ]; then
+  echo "fzf installer: no pinned checksum for $ASSET_NAME; skipping" >&2
+  exit 0
+fi
+
+# Idempotency guard via `fzf --version` — prints "0.71.0 (devel)" or similar.
+if [ -x "$INSTALL_PATH" ] \
+    && "$INSTALL_PATH" --version 2>/dev/null | grep -qF "${VERSION#v}"; then
+  echo "fzf installer: $VERSION already installed at $INSTALL_PATH" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$INSTALL_PATH")"
+
+tmp_tar=$(mktemp)
+tmp_dir=$(mktemp -d)
+trap 'rm -rf "$tmp_tar" "$tmp_dir"' EXIT
+
+echo "fzf installer: downloading $ASSET_URL" >&2
+curl -fsSL -o "$tmp_tar" "$ASSET_URL"
+
+actual=$(sha256sum "$tmp_tar" | awk '{print $1}')
+if [ "$EXPECTED_SHA" != "$actual" ]; then
+  echo "fzf installer: checksum mismatch for $ASSET_NAME" >&2
+  echo "  expected: $EXPECTED_SHA" >&2
+  echo "  actual:   $actual" >&2
+  exit 1
+fi
+
+tar -xzf "$tmp_tar" -C "$tmp_dir"
+binary=$(find "$tmp_dir" -type f -name fzf | head -1)
+if [ -z "$binary" ]; then
+  echo "fzf installer: no 'fzf' binary in $ASSET_NAME" >&2
+  exit 1
+fi
+
+chmod u+x "$binary"
+mv "$binary" "$INSTALL_PATH"
+echo "fzf installer: $VERSION installed to $INSTALL_PATH" >&2
