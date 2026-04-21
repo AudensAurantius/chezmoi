@@ -72,6 +72,8 @@ if [ "$burnttoast_available" = true ]; then
         buttons_env="${buttons_env:+${buttons_env}|}${btn}"
     done
 
+    # WSL2 only forwards env vars listed in WSLENV to Windows processes.
+    WSLENV="NOTIFY_TITLE:NOTIFY_BODY:NOTIFY_SCENARIO:NOTIFY_GROUP:NOTIFY_IMAGE:NOTIFY_HEADER:NOTIFY_BUTTONS" \
     NOTIFY_TITLE="$title" \
     NOTIFY_BODY="$body" \
     NOTIFY_SCENARIO="$scenario" \
@@ -82,16 +84,25 @@ if [ "$burnttoast_available" = true ]; then
     powershell.exe -NoProfile -NonInteractive -Command '
         Import-Module BurntToast -ErrorAction Stop
 
-        $text = [System.Collections.ArrayList]@($env:NOTIFY_TITLE)
-        if ($env:NOTIFY_BODY) { [void]$text.Add($env:NOTIFY_BODY) }
+        $textArr = @($env:NOTIFY_TITLE)
+        if ($env:NOTIFY_BODY) { $textArr = $textArr + @($env:NOTIFY_BODY) }
 
-        $params = @{ Text = $text.ToArray(); Scenario = $env:NOTIFY_SCENARIO }
+        $params = @{ Text = $textArr }
+
+        # BurntToast 1.x has no -Scenario; map to -Sound and -Urgent equivalents.
+        # Null-safe: WSLENV may be unset in some call contexts.
+        $scenario = if ($env:NOTIFY_SCENARIO) { $env:NOTIFY_SCENARIO.ToLower() } else { "" }
+        switch ($scenario) {
+            "reminder"     { $params.Sound = "Reminder" }
+            "alarm"        { $params.Sound = "Alarm"; $params.Urgent = $true }
+            "incomingcall" { $params.Sound = "Call";  $params.Urgent = $true }
+        }
 
         if ($env:NOTIFY_GROUP)  { $params.UniqueIdentifier = $env:NOTIFY_GROUP }
         if ($env:NOTIFY_IMAGE)  { $params.AppLogo = $env:NOTIFY_IMAGE }
 
         if ($env:NOTIFY_HEADER) {
-            $parts = $env:NOTIFY_HEADER -split "=", 2
+            $parts  = $env:NOTIFY_HEADER -split "=", 2
             $hId    = $parts[0]
             $hTitle = if ($parts.Count -gt 1) { $parts[1] } else { $parts[0] }
             $params.Header = New-BTHeader -Id $hId -Title $hTitle
