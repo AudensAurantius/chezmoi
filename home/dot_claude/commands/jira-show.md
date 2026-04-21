@@ -1,6 +1,7 @@
 ---
 name: jira-show
 description: Fetch a Jira ticket + recent comments and present a context briefing with local-mirror pointers
+argument-hint: <JIRA-KEY>
 author: Michael Haynes
 scope: global
 tags: [jira, mcp, atlassian, read-only]

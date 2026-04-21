@@ -1,6 +1,7 @@
 ---
 name: time-report
 description: Generate a monthly unified timeline report from Outlook calendar, Teams chat, and Timewarrior intervals
+argument-hint: "[month]"
 author: Michael Haynes
 scope: global
 tags: [time-tracking, reporting, outlook, teams, timewarrior]

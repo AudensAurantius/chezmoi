@@ -1,6 +1,7 @@
 ---
 name: post-comment
 description: Post a Jira comment draft as ADF via the Atlassian MCP tool, resolving mentions and updating draft frontmatter
+argument-hint: <draft-path>
 author: Michael Haynes
 scope: global
 tags: [jira, comments, mcp, adf, atlassian]

@@ -1,6 +1,7 @@
 ---
 name: jira-create
 description: Create a Jira issue, mirror to Beads with src:jira + URL external_ref, and scaffold a task working directory
+argument-hint: <summary> [--type=...] [--priority=...] [--project=...] [--description[-file]=...] [--assignee=...] [--client=...]
 author: Michael Haynes
 scope: global
 tags: [jira, beads, mcp, atlassian, task-directory]

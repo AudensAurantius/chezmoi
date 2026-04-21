@@ -1,6 +1,7 @@
 ---
 name: switch
 description: Switch Timewarrior tracking to a different bead in a single operation
+argument-hint: <bead-id>
 author: Michael Haynes
 scope: global
 tags: [time-tracking, beads, timewarrior]

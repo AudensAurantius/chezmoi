@@ -1,6 +1,7 @@
 ---
 name: start
 description: Begin work on a Beads issue — claim it and start a Timewarrior interval tagged with its billing tuple
+argument-hint: <bead-id>
 author: Michael Haynes
 scope: global
 tags: [time-tracking, beads, timewarrior]
@@ -42,6 +43,10 @@ Bead argument: $ARGUMENTS
 4. **Do not change bead status yourself.** `bd-timew start` already calls `bd update --claim` when appropriate. Don't double up.
 
 5. **Post-action:** no additional commentary unless the tuple looks wrong (e.g. `Svc: (none)` on what should be a billable bead) — in that case, flag it briefly and point at `.beads/bd-timew.yaml`.
+
+6. **Offer to scaffold a task directory.** Check whether `tasks/<bead-id>/` exists; for `src:jira` beads, also check `tasks/<JIRA-KEY>/`. If either exists, skip this step silently. Otherwise, ask the user on one line: `Scaffold tasks/<id>/? [y/N]`. Do not try to judge appropriateness from the bead description — the user decides at the prompt. On `y`/`yes`, invoke `/task-init <id>` yourself (don't wait for the user to re-type); on anything else, skip and continue.
+
+7. **Proceed to implementation.** After the timer is running, any tuple concern is flagged, and the task-dir prompt is resolved, read the bead's description (already printed by step 2) and begin the work. The user invoked `/start` to start doing the issue — do not stop and ask for confirmation. Exception: if the bead is pure scoping/design with no concrete deliverable yet, say so in one line and prompt for direction instead of spinning up speculative work.
 
 ## Related
 

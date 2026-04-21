@@ -1,6 +1,7 @@
 ---
 name: draft-comment
 description: Draft a Jira comment via the jira-comment-drafter subagent, isolating ticket-history context
+argument-hint: <ticket> [guidance]
 author: Michael Haynes
 scope: global
 tags: [jira, comments, subagent, adf]
