@@ -1,0 +1,69 @@
+#!/bin/sh
+# run_onchange_install-beads_viewer.sh.tmpl — install bv (beads_viewer) to ~/.local/bin.
+#
+# Asset naming (from v0.15.2 release):
+#   bv_<version>_<os>_<arch>.tar.gz   e.g. bv_0.15.2_linux_amd64.tar.gz
+# Tarball contains the `bv` binary at the top level.
+#
+# Version + per-OS/arch tarball SHA256 pinned in .chezmoidata/beads_viewer.yaml.
+# Upstream publishes checksums.txt; the .chezmoidata values are verbatim copies.
+#
+# No upstream install.sh is used — that script does not verify checksums.
+{{- $v := .beadsViewer.version -}}
+{{- $platform := printf "%s_%s" .chezmoi.os .chezmoi.arch -}}
+{{- $assetName := printf "bv_%s_%s.tar.gz" $v $platform -}}
+{{- $sha := dig $platform "" .beadsViewer.checksums -}}
+{{- $assetURL := printf "https://github.com/Dicklesworthstone/beads_viewer/releases/download/v%s/%s" $v $assetName }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+ASSET_NAME={{ $assetName | quote }}
+ASSET_URL={{ $assetURL | quote }}
+EXPECTED_SHA={{ $sha | quote }}
+INSTALL_PATH={{ joinPath .chezmoi.homeDir ".local" "bin" "bv" | quote }}
+
+if [ -z "$EXPECTED_SHA" ]; then
+  # No checksum pinned for this OS/arch in .chezmoidata/beads_viewer.yaml.
+  # Either upstream doesn't ship a binary for this platform, or the pin is
+  # incomplete. Skip with a note rather than fail apply.
+  echo "beads_viewer installer: no pinned checksum for $ASSET_NAME; skipping" >&2
+  exit 0
+fi
+
+# Idempotency guard — probe installed binary's version output. bv prints
+# something like "bv v0.15.2" or "0.15.2"; grep for the version substring
+# tolerates either format.
+if [ -x "$INSTALL_PATH" ] \
+    && "$INSTALL_PATH" --version 2>/dev/null | grep -qF "$VERSION"; then
+  echo "beads_viewer installer: $VERSION already installed at $INSTALL_PATH" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$INSTALL_PATH")"
+
+tmp_tar=$(mktemp)
+tmp_dir=$(mktemp -d)
+trap 'rm -rf "$tmp_tar" "$tmp_dir"' EXIT
+
+echo "beads_viewer installer: downloading $ASSET_URL" >&2
+curl -fsSL -o "$tmp_tar" "$ASSET_URL"
+
+actual=$(sha256sum "$tmp_tar" | awk '{print $1}')
+if [ "$EXPECTED_SHA" != "$actual" ]; then
+  echo "beads_viewer installer: checksum mismatch for $ASSET_NAME" >&2
+  echo "  expected: $EXPECTED_SHA" >&2
+  echo "  actual:   $actual" >&2
+  exit 1
+fi
+
+tar -xzf "$tmp_tar" -C "$tmp_dir"
+binary=$(find "$tmp_dir" -type f -name bv | head -1)
+if [ -z "$binary" ]; then
+  echo "beads_viewer installer: no 'bv' binary in $ASSET_NAME" >&2
+  exit 1
+fi
+
+chmod u+x "$binary"
+mv "$binary" "$INSTALL_PATH"
+echo "beads_viewer installer: $VERSION installed to $INSTALL_PATH" >&2
