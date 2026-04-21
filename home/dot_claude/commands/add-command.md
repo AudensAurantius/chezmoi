@@ -12,6 +12,10 @@ timestamps:
     at: 2026-04-21T12:30:00-05:00
     actor: Michael Haynes
     note: "Added argument-hint to step 5a required fields and metadata invariant"
+  - action: updated
+    at: 2026-04-21T13:15:00-05:00
+    actor: Michael Haynes
+    note: "Added script-extraction guidance to step 5, step 6 review block, and invariants"
 comments:
   - "Source: J121-9kp.2.6 meta-tooling wave 2 discussion (2026-04-20). First of three /add-* commands; the pattern-exemplar for /add-skill and /add-agent."
   - "Motivation: the project had accumulated enough ad-hoc slash commands that authoring-friction was worth formalizing. Prerequisite for the broader /add-*, /edit-*, /remove-* CRUD family."
@@ -106,6 +110,15 @@ Mutually exclusive groups:
    - Explicit halt conditions with concrete error messages.
    - Invariants (`Never X`, `Do not Y`) for destructive or ambiguous edges.
    - References to related commands.
+   - **Scripts extracted, never embedded.** If the command needs to run a
+     non-trivial bash script (more than ~5 lines, or invoked repeatedly),
+     write it to the appropriate scripts directory rather than embedding it
+     inline in the command body: `.claude/scripts/` for `--local` commands,
+     `~/.claude/scripts/` for `--global` commands (chezmoi source:
+     `~/.local/share/chezmoi/home/dot_claude/scripts/`). Reference it by
+     absolute path. Reason: embedded multi-line scripts cannot be
+     pre-authorized with granular `permissions.allow` rules — the permission
+     checker evaluates the full blob, not individual lines inside it.
 
 5a. **Metadata frontmatter — required for every new command.** Populate:
     - `name` — the command stem (filename without `.md`).
@@ -146,6 +159,11 @@ Mutually exclusive groups:
 6. **Present for review.**
    - Default: print the full proposed content inline and ask
      `Deploy this? (yes / edits / cancel)`.
+   - If any companion scripts were written to `.claude/scripts/` or
+     `~/.claude/scripts/`, include their full contents in the review block
+     and propose the `permissions.allow` entry needed to pre-authorize each
+     one (e.g., `"Bash(bash /path/to/script.sh)"`). The user reviews and
+     approves both the command file and any scripts before deploy.
    - `--create-draft`: write to the chosen path, print it, stop. On the
      user's return, re-invoke with `--from-draft=<path>`.
 
@@ -182,6 +200,13 @@ Mutually exclusive groups:
   the frontmatter `description` convey the same purpose in different
   phrasings. The registry uses frontmatter; the H1 is for readers-of-the-
   file.
+- **Extract non-trivial bash to script files; never embed inline.** The
+  permission checker evaluates the full blob of an embedded multi-line
+  script — granular `permissions.allow` rules won't match lines inside it.
+  Scripts >~5 lines or invoked repeatedly belong in `.claude/scripts/`
+  (local) or `~/.claude/scripts/` (global). Add `Bash(bash <path>)` to
+  the appropriate `settings.json` during deploy and include it in the
+  review block.
 
 ## Related
 
