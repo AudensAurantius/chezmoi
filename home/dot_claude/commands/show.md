@@ -1,7 +1,7 @@
 ---
 name: show
 description: Filter+list beads (or inspect one) using ergonomic flag names that map to bd label/filter syntax
-argument-hint: "[--task <id>] [--epic <id>] [--area <name>] [--service <name>] [--assignee <name>] [--status <s>] [--ready] [--priority <N>] [-n <N>]"
+argument-hint: "[--task <id>] [--epic <id>] [--area <name>] [--service <name>] [--assignee <name>] [--status <s>] [--ready] [--priority <N>] [-n <N>] [--with-context]"
 author: Michael Haynes
 scope: global
 tags: [beads, productivity, read-only]
@@ -9,10 +9,14 @@ timestamps:
   - action: created
     at: 2026-04-20T20:30:48-05:00
     actor: Michael Haynes
+  - action: updated
+    at: 2026-04-21T11:00:00-05:00
+    actor: Michael Haynes
 comments:
   - "Source: J121-9kp.2.15 Wave 2 productivity bundle (2026-04-20). Sibling to /next (J121-9kp.2.13) under the split decided in bd remember show-vs-next-split."
   - "Motivation: default bd list/ready require dim:value label syntax (--label area:claude, --label svc:none) which is ergonomically hostile; /show exposes --area/--service as first-class flags that translate internally. Also solves the 'I forgot the bead ID' problem that /start can't solve itself (positional arg must be precise — fuzzy matching in /start would risk corrupting billing)."
   - "Projected use: invoke when browsing available work, checking what's under an epic, or inspecting a single bead by partial recall. Read-only; no scoring (that belongs in /next). --task <id> is a single-item inspect that dispatches to bd show."
+  - "2026-04-21: Added --with-context flag. When --task <id> is combined with --with-context, appends a Context section after the bead output: searches bd memories for keywords derived from the bead title and labels, surfaces any matching entries, and extracts doc/path references from the bead's notes field."
 related: [/next, /start, /switch, /status]
 ---
 
@@ -35,20 +39,43 @@ Arguments: $ARGUMENTS
 - `/show --priority <N>` — exact priority (0-4 or P0-P4)
 - `/show --priority <=N>` — priority ceiling (post-filter)
 - `/show -n <N>` — limit results (default: bd's own default of 50)
+- `/show --task <id> --with-context` — single-bead inspect with appended Context section (memories + doc links)
 
-Flags combine with AND semantics. `--task` is exclusive; any other flag passed with `--task` is an error.
+Flags combine with AND semantics. `--task` is exclusive with other filters, but may be combined with `--with-context`.
 
 ## Instructions
 
 1. **Parse arguments.** Tokenize `$ARGUMENTS` on whitespace. Recognize the flags above; each takes the next token as its value except `--ready` and `--mine` (booleans). Unknown tokens → print a usage message and stop. Don't guess.
 
-2. **Handle `--task` exclusively.** If `--task <id>` was passed along with any other filter, print:
+2. **Handle `--task` exclusively.** If `--task <id>` was passed along with any filter *other than `--with-context`*, print:
 
    ```
    /show: --task <id> is a single-bead inspect; it cannot be combined with other filters.
    ```
 
-   and stop. If only `--task <id>` was passed, run `bd show <id>` via Bash and report the output verbatim. Do not post-process. That's the whole behavior for this branch.
+   and stop. If `--task <id>` was passed (with or without `--with-context`), run `bd show <id>` via Bash and report the output verbatim. If `--with-context` was also set, proceed to step 2a after the output; otherwise stop here.
+
+   **2a. `--with-context` enrichment (--task only).** Extract context from the bead output:
+   - **Keywords:** derive 2-4 search terms from the bead's title and labels. Prefer specific nouns (e.g., "pipeline", "snowflake", "BOCO-18077") over generic ones ("task", "open", "review").
+   - **Memories:** run `bd memories <keyword>` for each term via Bash. Deduplicate results; keep entries that look substantively related (discard generic workflow entries that would appear for any bead).
+   - **Doc links:** scan the bead's `NOTES` section (if any) for lines containing path fragments (`docs/`, `tasks/`, `.md`, `.sql`, `J121-pipelines/`) and extract them as a list.
+   - Render as a `── Context ──` block appended after the main bead output:
+
+     ```
+     ── Context ──
+
+     Memories (bd remember):
+       • <key>: <first ~120 chars of value>
+       • <key>: ...
+       (none) if no relevant matches
+
+     Supporting docs:
+       • <path-or-link>
+       • ...
+       (none) if notes contain no path references
+     ```
+
+   - If both sections are empty, omit the Context block entirely — no noise.
 
 3. **Normalize `--priority` input.** Accept `--priority 2`, `--priority P2`, `--priority <=2`, or `--priority <=P2`. Strip any `P`/`p` prefix and any leading `<=`. Remember whether the user wrote `<=` (ceiling) vs. no prefix (exact).
 
