@@ -1,0 +1,15 @@
+{{- /*
+  sync-repos-list: absolute paths of git repos to auto-sync daily.
+  One path per line. Host-aware — emit different paths per machine by
+  branching on `.chezmoi.hostname`.
+
+  Consumers:
+    - dot_config/sync-repos/repos.conf.tmpl   (daily git push timer)
+    - (future) repo-status notifier, etc.
+
+  Mix absolute and home-relative paths freely — all output lines are treated
+  as absolute, so prepend `{{`.chezmoi.homeDir`}}/` for home-relative entries.
+  Absolute paths like /etc/ are fine here but require the consumer to run
+  with appropriate privileges (deferred).
+*/ -}}
+{{ .chezmoi.homeDir }}/.timewarrior

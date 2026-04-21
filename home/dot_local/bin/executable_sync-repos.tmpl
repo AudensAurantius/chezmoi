@@ -1,0 +1,74 @@
+{{ if lookPath "git" -}}
+#!/usr/bin/env bash
+# sync-repos: daily git auto-commit + push for every repo listed in
+# ~/.config/sync-repos/repos.conf. Invoked by sync-repos.service
+# (systemd user unit), triggered by sync-repos.timer.
+#
+# Config source of truth: .chezmoitemplates/sync-repos-list
+# Rendered to:            ~/.config/sync-repos/repos.conf
+#
+# Per-repo behavior:
+#   - If the working tree is dirty, `git add -A` + commit "auto-sync: YYYY-MM-DD"
+#   - If an upstream is configured, `git push`
+#   - Errors in one repo do not abort the rest; exit status reflects any failure
+#
+# Safe to run manually alongside the timer: flock guards against overlap.
+
+set -euo pipefail
+shopt -s extglob
+
+CONFIG="${HOME}/.config/sync-repos/repos.conf"
+LOCK=/tmp/sync-repos.lock
+
+log() { logger -t sync-repos -- "$*"; echo "sync-repos: $*" >&2; }
+
+# Executable-dependency guard (per chezmoi conventions in
+# ~/.claude/projects/-home-hactar/memory/feedback-chezmoi-patterns.md).
+# git is template-guarded above; flock and logger checked here.
+for cmd in flock logger; do
+    command -v "$cmd" >/dev/null 2>&1 || {
+        echo "sync-repos: missing required command: $cmd" >&2
+        exit 2
+    }
+done
+
+[ -r "$CONFIG" ] || { log "no config at $CONFIG; nothing to do"; exit 0; }
+
+exec 9>"$LOCK"
+flock -n 9 || { log "another instance holds the lock; exiting"; exit 0; }
+
+today="$(date +%F)"
+status=0
+
+while IFS= read -r repo || [ -n "$repo" ]; do
+    repo="${repo%%#*}"                 # strip inline comment
+    repo="${repo##+([[:space:]])}"     # strip leading whitespace
+    repo="${repo%%+([[:space:]])}"     # strip trailing whitespace
+    [ -z "$repo" ] && continue
+
+    if [ ! -d "$repo/.git" ]; then
+        log "skip: $repo has no .git directory"
+        status=1
+        continue
+    fi
+
+    (
+        cd "$repo"
+        if ! git diff --quiet \
+           || ! git diff --cached --quiet \
+           || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+            git add -A
+            git commit -m "auto-sync: ${today}" >/dev/null
+            log "committed in ${repo}"
+        fi
+        if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+            git push --quiet
+            log "pushed ${repo}"
+        else
+            log "no upstream for ${repo}; skipped push"
+        fi
+    ) || { log "error syncing ${repo}"; status=1; }
+done < "$CONFIG"
+
+exit "$status"
+{{- end }}

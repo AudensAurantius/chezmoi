@@ -1,0 +1,12 @@
+{{ if lookPath "git" -}}
+[Unit]
+Description=Daily trigger for sync-repos.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target
+{{- end }}
