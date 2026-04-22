@@ -1,0 +1,39 @@
+{
+  "_comment": "Template fragment embedded into each session's <session-dir>/.claude/settings.local.json by scripts/scaffold-autosession.sh — NOT merged into global ~/.claude/settings.json. Session-scoped hooks mean these commands ONLY fire when Claude Code is launched from a session dir; interactive sessions never see them. scaffold-autosession.sh wraps each command via scripts/lib/hook-wrapper.sh at scaffold time, so the rendered settings.local.json has the full wrapper invocation, not the raw inner script.",
+  "_env_contract": "The wrapped commands require AUTOSESSION_SLUG and AUTOSESSION_DIR in the environment. run.sh exports both before calling `exec claude`, so any hook that fires under that claude process inherits them. See run.sh.tmpl.",
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<WRAPPED>$SKILL_DIR/scripts/lib/notify-dispatcher.sh</WRAPPED>"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<WRAPPED>$SKILL_DIR/scripts/lib/preuse-cancel-nag.sh</WRAPPED>"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<WRAPPED>$SKILL_DIR/scripts/lib/post-compact-rehydrate.sh</WRAPPED>"
+          }
+        ]
+      }
+    ]
+  }
+}

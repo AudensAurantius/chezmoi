@@ -1,0 +1,222 @@
+# auto-session default permissions template
+#
+# The skill reads this file during scope elicitation, merges the active entries
+# into the TARGET PROJECT's .claude/settings.local.json under permissions.allow,
+# and leaves the commented-out blocks for the user to opt into explicitly.
+#
+# Distinction from session-dir settings: the session dir has its OWN
+# .claude/settings.local.json (which carries the hook registrations). This
+# template's merge target is the *parent project's* settings.local.json, so
+# the coordinator running in the session dir can invoke pre-authorized
+# commands against the parent project's repo without prompting.
+#
+# Merge semantics (idempotent):
+# - Entries already present are not duplicated.
+# - Entries removed from this template do NOT retroactively remove live entries
+#   from settings.local.json — dropping a permission requires an explicit
+#   user edit.
+# - Writes target .claude/settings.local.json, never .claude/settings.json,
+#   so session-specific grants don't leak into the repo's committed config.
+#
+# Structure:
+# - autosession_scripts — the skill's own scripts/lib/ entries. The coordinator
+#   should never need to invoke these directly — they're hook-only surfaces.
+#   All documented here as DISALLOWED so the merge logic refuses to include
+#   them even if the user hand-edits them in.
+# - command_permissions — common read-only / low-risk commands the coordinator
+#   typically needs. All commented out by default; the user uncomments the
+#   groups they want to pre-authorize.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. Auto-session's own scripts — ALL hook-only, none coordinator-invokable
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Under the session-scoped-hooks architecture, every script in scripts/lib/ is
+# invoked either by a Claude Code hook (via scripts/lib/hook-wrapper.sh) or by
+# another script in the same dir. The coordinator itself has no reason to call
+# any of them directly, so `allowed` is deliberately empty.
+
+autosession_scripts:
+  allowed: []
+
+  # Scripts that must NEVER be pre-authorized. Documented here so the user can
+  # see the reasoning when reviewing this template. The skill refuses to
+  # include these in an allowlist merge even if the user edits them into the
+  # `allowed` block by mistake.
+  disallowed:
+    - pattern: "Bash($HOME/.claude/skills/auto-session/install.sh:*)"
+      reason: "TTY-guarded one-time installer. Must never be invokable by an autonomous coordinator or subagent — that would bypass the interactive INSTALL confirmation that is the whole point of the guard."
+
+    - pattern: "Bash($HOME/.claude/skills/auto-session/scripts/lib/hook-wrapper.sh:*)"
+      reason: "Invoked by the session's Claude Code hooks to wrap the real hook with watchdog + two-record logging. Direct invocation bypasses the hook-event payload contract and writes spurious log records."
+
+    - pattern: "Bash($HOME/.claude/skills/auto-session/scripts/lib/notify-dispatcher.sh:*)"
+      reason: "Invoked by the Notification hook with a JSON stdin payload. Calling it directly would fire a spurious toast and (worse) could spawn an orphan nag-repeater. Hook-only surface."
+
+    - pattern: "Bash($HOME/.claude/skills/auto-session/scripts/lib/nag-repeater.sh:*)"
+      reason: "Spawned detached by notify-dispatcher.sh with a specific PID-file contract. Direct invocation violates that contract and leaks PID files."
+
+    - pattern: "Bash($HOME/.claude/skills/auto-session/scripts/lib/preuse-cancel-nag.sh:*)"
+      reason: "Invoked by the PreToolUse hook. Direct invocation would kill an active nag that the user hasn't actually responded to."
+
+    - pattern: "Bash($HOME/.claude/skills/auto-session/scripts/lib/post-compact-rehydrate.sh:*)"
+      reason: "Invoked by the SessionStart:compact hook. Direct invocation emits a spurious rehydrate instruction into the coordinator's context."
+
+    - pattern: "Bash($HOME/.claude/skills/auto-session/scripts/scaffold-autosession.sh:*)"
+      reason: "One-shot scaffolder invoked by the skill itself during /auto-session setup. The coordinator must never re-scaffold its own session mid-flight — that would stomp live state files."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. Command permissions — opt-in groups
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Uncomment the groups the coordinator is expected to need. The skill merges
+# uncommented `pattern` values into permissions.allow. `purpose` is informative
+# only (not part of the merged JSON).
+#
+# Policy reminders:
+# - Read-only commands only. Anything that mutates state stays prompted.
+# - No interpreter wildcards (python:*, node:*, bun:*, bash:*). Those are
+#   equivalent to arbitrary code execution.
+# - No `gh api *` — use specific `gh <subcommand>` patterns instead.
+# - Many common commands (ls, cat, git status, gh pr view, rg, grep, jq, ...)
+#   are already auto-allowed by Claude Code without an allowlist entry; do not
+#   add them here.
+
+command_permissions:
+
+  # ─── Beads (bd) ────────────────────────────────────────────────────────────
+  # Coordinator-safe queries and claim/close operations. Never includes
+  # `bd jira sync` (push direction is unsafe) or `bd delete` / `bd wipe`.
+  # bd_core:
+  #   - pattern: "Bash(bd ready:*)"
+  #     purpose: "Discover next-work candidates."
+  #   - pattern: "Bash(bd show:*)"
+  #     purpose: "Read bead details."
+  #   - pattern: "Bash(bd list:*)"
+  #     purpose: "List beads by filter."
+  #   - pattern: "Bash(bd query:*)"
+  #     purpose: "Native bd query-language filter (AND/OR/NOT/parens)."
+  #   - pattern: "Bash(bd memories:*)"
+  #     purpose: "Recall project-technical facts."
+  #   - pattern: "Bash(bd update:*)"
+  #     purpose: "Claim beads, update status/metadata/notes."
+  #   - pattern: "Bash(bd note:*)"
+  #     purpose: "Append structured audit notes (per autosession beads policy)."
+  #   - pattern: "Bash(bd close:*)"
+  #     purpose: "Close beads at end-of-work."
+  #   - pattern: "Bash(bd create:*)"
+  #     purpose: "File follow-up beads discovered during the session."
+  #   - pattern: "Bash(bd remember:*)"
+  #     purpose: "Persist durable project facts."
+
+  # ─── Time tracking (bd-timew / timew) ──────────────────────────────────────
+  # bd_timew:
+  #   - pattern: "Bash(bd-timew:*)"
+  #     purpose: "Start/stop/switch intervals aligned with bead claims."
+  #   - pattern: "Bash(timew:*)"
+  #     purpose: "Direct timew queries (summary, export, tags)."
+
+  # ─── Git — read-only is already auto-allowed; this covers the writes ──────
+  # Narrow patterns only; never allow `git push:*` as a blanket wildcard.
+  # git_writes_local:
+  #   - pattern: "Bash(git add:*)"
+  #     purpose: "Stage changes for commit."
+  #   - pattern: "Bash(git commit:*)"
+  #     purpose: "Create commits on the session's feature branch."
+  #   - pattern: "Bash(git checkout -b feature/auto-*)"
+  #     purpose: "Create the session's feature branch."
+  #   - pattern: "Bash(git restore:*)"
+  #     purpose: "Discard local changes deliberately during reversion."
+
+  # Push is separate because it crosses a network boundary. Only uncomment the
+  # specific remotes/branches the project's pre-authorized push list covers.
+  # git_pushes:
+  #   - pattern: "Bash(git push origin feature/auto-*)"
+  #     purpose: "Push session feature branches at shutdown."
+  #   - pattern: "Bash(git -C .beads push:*)"
+  #     purpose: "Push the nested .beads repo per J121 project policy."
+  #   - pattern: "Bash(git -C tasks push:*)"
+  #     purpose: "Push the nested tasks repo per J121 project policy."
+
+  # ─── GitHub CLI — writes only; reads are auto-allowed ─────────────────────
+  # gh_writes:
+  #   - pattern: "Bash(gh pr create:*)"
+  #     purpose: "File PRs from session feature branches."
+  #   - pattern: "Bash(gh pr edit:*)"
+  #     purpose: "Amend PR body/title from the coordinator."
+
+  # ─── Chezmoi ──────────────────────────────────────────────────────────────
+  # Chezmoi renders are the common coordinator operation; `apply` is a write
+  # and belongs in a separate block. `--source=<path>` is the pattern the skill
+  # uses when the chezmoi repo is cloned into the session dir.
+  # chezmoi_render:
+  #   - pattern: "Bash(chezmoi diff:*)"
+  #     purpose: "Preview the effect of a chezmoi change without applying."
+  #   - pattern: "Bash(chezmoi cat:*)"
+  #     purpose: "Render a single file under dot_claude/ without writing it."
+  #   - pattern: "Bash(chezmoi execute-template:*)"
+  #     purpose: "Render a template fragment for inspection."
+  #   - pattern: "Bash(chezmoi managed:*)"
+  #     purpose: "List managed paths for verification."
+  #   - pattern: "Bash(chezmoi status:*)"
+  #     purpose: "Show chezmoi source-vs-target drift."
+  # chezmoi_apply:
+  #   - pattern: "Bash(chezmoi apply:*)"
+  #     purpose: "Apply the chezmoi source to the live ~/.claude/ tree."
+
+  # ─── SmartStore / .NET build ──────────────────────────────────────────────
+  # dotnet_build:
+  #   - pattern: "Bash(dotnet test:*)"
+  #     purpose: "Run test projects during verification."
+  #   - pattern: "Bash(dotnet build:*)"
+  #     purpose: "Compile SDK-style projects."
+  #   - pattern: "Bash(dotnet msbuild:*)"
+  #     purpose: "Build old-style .NET Framework projects on Linux."
+  #   - pattern: "Bash(msbuild:*)"
+  #     purpose: "Build plugin solutions on Windows/WSL2."
+
+  # ─── Jira MCP — read-only tools ───────────────────────────────────────────
+  # Jira writes go through /post-comment and /jira-create (interactive, not
+  # auto-session-triggered). Uncomment reads only.
+  # jira_mcp_read:
+  #   - pattern: "mcp__claude_ai_Atlassian__getJiraIssue"
+  #     purpose: "Fetch ticket details for context."
+  #   - pattern: "mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql"
+  #     purpose: "JQL search for related tickets."
+  #   - pattern: "mcp__claude_ai_Atlassian__getTransitionsForJiraIssue"
+  #     purpose: "Inspect workflow transitions without firing them."
+
+  # ─── claude-mem MCP — observation recall ──────────────────────────────────
+  # claudemem_mcp_read:
+  #   - pattern: "mcp__plugin_claude-mem_mcp-search__get_observations"
+  #     purpose: "Recall specific past observations by ID."
+  #   - pattern: "mcp__plugin_claude-mem_mcp-search__search"
+  #     purpose: "Keyword/semantic search across session history."
+  #   - pattern: "mcp__plugin_claude-mem_mcp-search__smart_search"
+  #     purpose: "Planner-augmented search when a simple query won't cut it."
+  #   - pattern: "mcp__plugin_claude-mem_mcp-search__timeline"
+  #     purpose: "Temporal slice of session history."
+
+  # ─── Snowflake (only for snowflake-scoped sessions) ───────────────────────
+  # snow_cli_read:
+  #   - pattern: "Bash(snow sql:*)"
+  #     purpose: "Execute SELECT-shaped queries for validation."
+  #   - pattern: "Bash(schemachange:*)"
+  #     purpose: "Migration-tool invocations during snowflake_migrations work."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. Notes for the skill's merge logic
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# - `autosession_scripts.allowed[*].pattern` is merged unconditionally (empty
+#   under this template — all lib scripts are hook-only).
+# - `autosession_scripts.disallowed[*].pattern` is explicitly excluded from the
+#   merge even if it appears in `allowed`. The skill logs a warning if a
+#   disallowed pattern was present in `allowed` and drops it.
+# - `command_permissions.*[*].pattern` is merged only when the containing group
+#   is uncommented in the active template.
+# - The `purpose` field is discarded at merge time; it exists for human
+#   readability only.
+# - Merge target: `<project-root>/.claude/settings.local.json` under
+#   `permissions.allow`. The skill creates the file if absent and preserves
+#   all other keys.

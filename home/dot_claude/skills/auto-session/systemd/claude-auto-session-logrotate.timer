@@ -1,0 +1,14 @@
+[Unit]
+Description=Daily rotation of auto-session hook logs
+Documentation=file://%h/.claude/skills/auto-session/logrotate.d/claude-auto-session.conf
+
+[Timer]
+# Fire daily at 03:15 local time. Randomized delay avoids a stampede if the
+# user has multiple user-level timers scheduled at the same moment.
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=claude-auto-session-logrotate.service
+
+[Install]
+WantedBy=timers.target

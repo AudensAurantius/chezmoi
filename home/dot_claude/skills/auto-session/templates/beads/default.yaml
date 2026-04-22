@@ -1,0 +1,133 @@
+# auto-session default beads-mutation policy
+#
+# Governs what the coordinator is allowed to do to beads during an autonomous
+# session. The skill embeds this (or a user-supplied alternate) into prompt.md
+# verbatim so the coordinator has the rules inline. The review agent also reads
+# it and flags violations.
+#
+# Design principles:
+# - Metadata for cardinality-1 classifications (agent, session slug)
+# - Labels only for transient operational state (deferred/blocked markers)
+# - Notes with structured prefix carry full attribution + rationale history
+# - No accumulating `src:autosession-<slug>` labels — those become noise across
+#   multi-session re-touches; the notes trail is the audit record
+# - Coordinator respects user's custom statuses (bd config get status.custom);
+#   on-finish defaults to `review`, not `closed`, so work lands in a human
+#   review queue
+#
+# Placeholders filled in at scaffold time:
+#   <slug>  — the session slug (scope elicitation step 1.1)
+#   <ISO>   — replaced per-invocation with `date -Iseconds` by the coordinator
+
+lifecycle:
+
+  # ─── Claim — can the coordinator start work on a bead at all? ──────────────
+  claim:
+    enabled: true                     # coordinator may `bd update <id> --claim`
+
+  # ─── Status transitions ───────────────────────────────────────────────────
+  # Maps lifecycle events to the target status and any label side-effects.
+  # Coordinator pairs every status change with `--append-notes "<transition_prefix> <from> -> <new>; <rationale>"`
+  # in a single invocation — notes are the transition-attribution audit trail
+  # since bd 1.0.2 has no per-transition metadata for non-close transitions.
+  status_transitions:
+    on_claim:
+      status: in_progress
+      remove_labels: ["autosession-deferred", "autosession-blocked"]
+    on_finish:
+      status: review                  # NOT closed — user's custom status lands work in human-review queue
+      # No labels added on finish — attribution lives in metadata + notes, not labels
+    on_defer:
+      status: open
+      add_labels: ["autosession-deferred"]
+    on_block:
+      status: blocked
+      add_labels: ["autosession-blocked"]
+
+    # Strict allowlist (optional). If present, coordinator must refuse any
+    # transition not in this list and halt as a blocking decision instead.
+    # Leave empty to allow any transition the above events can produce.
+    allowed_transitions:
+      - "open -> in_progress"
+      - "in_progress -> review"
+      - "in_progress -> open"
+      - "in_progress -> blocked"
+      - "blocked -> in_progress"
+
+    # Every status change must carry an --append-notes entry. Scaffold embeds
+    # this rule verbatim in prompt.md; review agent flags violations.
+    transition_note_required: true
+
+  # ─── Labels — transient markers only, no accumulating attribution ─────────
+  labels:
+    can_add: true
+    can_remove: true                  # needed so claim can clear deferred/blocked markers
+    # The coordinator may only touch labels whose names begin with one of these:
+    allowed_prefixes:
+      - "autosession-"                # transient operational state only
+    # Labels the coordinator must never touch (safety net):
+    forbidden:
+      - "src:jira"                    # Jira sync owns this; stripping it would confuse the incremental sync
+      - "scope:local"                 # user-asserted scope
+      - "area:"                       # prefix-match: coordinator never retags areas
+
+  # ─── Metadata — cardinality-1 classifications ─────────────────────────────
+  # Set on claim, rewritten each claim (last-toucher semantics). Queryable via
+  # `bd list --metadata-field agent=claude` and `bd list --has-metadata-key autosession_slug`.
+  metadata:
+    set_on_claim:
+      agent: claude
+      autosession_slug: "<slug>"
+    # No rewrites on other transitions — agent/slug stay as last-claimer until next claim.
+    # Do not unset on defer/finish — last-toucher identification persists.
+
+  # ─── Notes — the structured audit trail ───────────────────────────────────
+  notes:
+    # Every bd update / bd note by the coordinator must start with this prefix.
+    # Review agent greps notes for violations.
+    transition_prefix: "[autosession/<slug> <ISO>]"
+    required_on_status_change: true
+    required_on_claim: true           # include claim rationale even without status change
+    # Example bd update invocation the coordinator must produce:
+    #   bd update J121-xxx --status review \
+    #     --append-notes "[autosession/tooling-wave-1-3-20260422T14:03:00Z] in_progress -> review; tests pass, coverage ≥70%"
+
+  # ─── Comments — unfilterable from bd CLI; default off ─────────────────────
+  comments:
+    can_add: false                    # default: coordinator uses notes, not comments — notes are query-filterable
+    # If enabled, the same prefix convention applies:
+    prefix_required: "[autosession/<slug> <ISO>]"
+
+  # ─── Description — default off; description edits are a human concern ─────
+  description:
+    can_append: false
+
+  # ─── Graph (parent/child + dependencies) — default off ────────────────────
+  # Dependency graph edits are cross-cutting and risky; require explicit opt-in
+  # per session if the scope genuinely needs it.
+  graph:
+    can_set_parent: false
+    can_add_dependencies: false       # `bd dep add` / `bd dep remove`
+    can_remove_dependencies: false
+
+  # ─── Create — default off; new beads = blocking decisions ─────────────────
+  # When a session legitimately needs to file follow-up work, enable this and
+  # require the parent anchor + required-label pattern below so the cohort is
+  # enumerable via `bd list --parent=<anchor>` at /import-session time.
+  create:
+    enabled: false
+    allowed_types: []                 # e.g. ["task"] when enabled
+    required_labels:                  # applied to every coordinator-created bead
+      - "src:autosession-<slug>"      # ONE case where the autosession label is warranted — marks provenance on new beads only
+    required_parent: ""               # e.g. "<session-anchor-bead-id>" when create.enabled: true
+
+  # ─── Memory — durable bd remember entries ─────────────────────────────────
+  memory:
+    can_remember: true
+    # Prescribed format — every coordinator-added memory must match this shape
+    # so `bd memories autosession` surfaces the cohort and /import-session can
+    # filter for review:
+    format: "autosession[<slug>]: <fact> (see <session-dir>/exit-summary.md#discoveries)"
+    # Default review policy — autosession memories are flagged for user review
+    # at /import-session time rather than silently promoted into canonical bd remember.
+    review_on_import: true
