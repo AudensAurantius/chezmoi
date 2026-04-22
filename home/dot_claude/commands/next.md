@@ -1,7 +1,7 @@
 ---
 name: next
 description: Recommend the next bead to work on — delegates scoring to bv --robot-triage (graph-aware), falls back to bd ready if bv is unavailable
-argument-hint: "[--parent <id>] [--epic <id>] [--label <dim:value>] [--priority <=N>] [--mine] [-n <N>]"
+argument-hint: "[--parent <id>] [--epic <id>] [--src <value>] [--area <name>] [--svc <name>] [--label <dim:value>] [--priority <=N>] [--mine] [-n <N>]"
 author: Michael Haynes
 scope: global
 tags: [beads, productivity, beads-viewer, graph-metrics]
@@ -12,6 +12,10 @@ timestamps:
   - action: edited
     at: 2026-04-20T21:50:00-05:00
     actor: Michael Haynes
+  - action: edited
+    at: 2026-04-21T16:30:00-05:00
+    actor: Michael Haynes
+    note: "Added --src/--area/--svc shorthand flags as sugar over --label for the three billing label dimensions"
 comments:
   - "Source: J121-9kp.2.13 Wave 2 productivity bundle (2026-04-20). Paired with /show (J121-9kp.2.15, read-only filter+list)."
   - "Motivation: default `bd ready` output is undifferentiated across epics/areas. /next scopes to a parent/area/priority slice and surfaces one curated recommendation with short alternates."
@@ -30,6 +34,9 @@ Arguments: $ARGUMENTS
 
 - `/next` — top of the ready queue across the whole workspace (3 candidates)
 - `/next --parent <id>` / `/next --epic <id>` — scope to descendants of a parent or epic
+- `/next --src <value>` — shorthand for `--label src:<value>`, e.g. `--src jira` (repeatable)
+- `/next --area <name>` — shorthand for `--label area:<name>`, e.g. `--area snowflake` (repeatable)
+- `/next --svc <name>` — shorthand for `--label svc:<name>`, e.g. `--svc none` (repeatable)
 - `/next --label <dim:value>` — filter by label (repeatable; AND semantics)
 - `/next --label-any <dim:value,...>` — filter by labels (OR semantics; comma-separated)
 - `/next --priority <=N>` — cap priority floor, e.g. `--priority <=2` = P0/P1/P2 only
@@ -42,6 +49,13 @@ Flags combine freely.
 ## Instructions
 
 1. **Parse arguments.** Tokenize `$ARGUMENTS` on whitespace. Recognize the flags above; each takes the next token as its value except `--mine` (boolean). Unknown tokens → print a usage message and stop; don't guess.
+
+   **Expand shorthand flags immediately after parsing** — before any other step:
+   - Each `--src <v>` → append `src:<v>` to the `--label` list
+   - Each `--area <v>` → append `area:<v>` to the `--label` list
+   - Each `--svc <v>` → append `svc:<v>` to the `--label` list
+
+   After expansion, all three are indistinguishable from `--label` entries; all downstream steps (bv flag translation, post-filtering, bd ready flag translation) treat them identically.
 
 2. **Normalize `--priority` input.** Accept `--priority 2`, `--priority P2`, `--priority <=2`, or `--priority <=P2`. Strip `P`/`p` prefix and leading `<=`. Remember whether `<=` was present (ceiling vs. exact match).
 
@@ -138,7 +152,9 @@ Flags combine freely.
 
 ### Both paths
 
-12. **Filter summary format.** Terse recap of user flags, e.g. `parent=J121-9kp.2 · priority<=2 · mine`. Use `all ready` if no filters were given. Always include `· via bv` or `· via bd ready (bv unavailable)` to make the ranking source explicit.
+12. **Filter summary format.** Terse recap of user flags. Use `all ready` if no filters were given. Always include `· via bv` or `· via bd ready (bv unavailable)` to make the ranking source explicit.
+
+    Label shorthands use their short form in the summary (e.g. `src=jira · area=snowflake`); raw `--label` entries render as `label=<v>`. Other flags: `parent=J121-9kp.2 · priority<=2 · mine`. Example: `src=jira · priority<=2 · via bv`.
 
 13. **Single-candidate case.** If only one candidate comes back after filtering, omit the `Alternates` block and print `(no alternates at this filter scope)` underneath the top pick.
 
