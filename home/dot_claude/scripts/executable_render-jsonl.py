@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 
-UUID_MARKER = re.compile(r"<!--\s*uuid=([0-9a-f-]{36})\s*-->")
+UUID_MARKER = re.compile(r"<!--[^>]*?\buuid=([0-9a-f-]{36})[^>]*?-->")
 
 
 def block_text(block: dict) -> str:
@@ -66,23 +66,54 @@ def message_text(msg) -> str:
     return str(msg)
 
 
-def render_record(rec: dict, turn_idx: int) -> str | None:
-    """Return a Markdown chunk for one record, or None to skip it."""
+def text_only(msg) -> str:
+    """Concatenate only `type=text` blocks — skip tool_use, tool_result, thinking."""
+    if isinstance(msg, str):
+        return msg
+    if isinstance(msg, dict):
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return "".join(
+                b.get("text", "") for b in content
+                if isinstance(b, dict) and b.get("type") == "text"
+            )
+    return ""
+
+
+def render_record(rec: dict, turn_idx: int, mode: str = "full") -> str | None:
+    """Return a Markdown chunk for one record, or None to skip it.
+
+    mode="full": all block types rendered (tool_use + tool_result summarised).
+    mode="conversation": only user prompts (text, not tool_result) + assistant
+    text blocks; intermediate tool-only turns are skipped entirely.
+    """
     t = rec.get("type")
     ts = rec.get("timestamp", "")
     uid = rec.get("uuid", "")
     if t == "user":
-        body = message_text(rec.get("message", {})).strip()
+        body = (text_only if mode == "conversation" else message_text)(
+            rec.get("message", {})
+        ).strip()
         if not body:
             return None
+        if mode == "conversation":
+            return (
+                f"\n---\n\n## You <!-- ts={ts} uuid={uid} -->\n\n{body}\n"
+            )
         return (
             f"\n---\n\n## Turn {turn_idx} — user "
             f"<!-- ts={ts} uuid={uid} -->\n\n{body}\n"
         )
     if t == "assistant":
-        body = message_text(rec.get("message", {})).rstrip()
+        body = (text_only if mode == "conversation" else message_text)(
+            rec.get("message", {})
+        ).rstrip()
         if not body:
             return None
+        if mode == "conversation":
+            return f"\n### Claude <!-- ts={ts} uuid={uid} -->\n\n{body}\n"
         return f"\n### Assistant <!-- ts={ts} uuid={uid} -->\n\n{body}\n"
     return None  # Skip system/attachment/snapshot/custom-title/last-prompt.
 
@@ -99,14 +130,26 @@ def count_user_turns(md_path: Path) -> int:
     return len(re.findall(r"^## Turn \d+ — user", md_path.read_text(), re.M))
 
 
-def render_full(src: Path) -> str:
-    lines: list[str] = [
-        f"# Session transcript: `{src.name}`\n",
+def _header(src: Path, mode: str) -> str:
+    if mode == "conversation":
+        return (
+            f"# Conversation: `{src.name}`\n\n"
+            "> **Rendered view — authoritative source is the sibling `.jsonl` file.**\n"
+            "> Conversation mode: user prompts + assistant text only. "
+            "Tool calls, tool results, thinking, and tool-only assistant turns "
+            "are omitted. Each turn carries a `uuid=…` marker for append-merge.\n"
+        )
+    return (
+        f"# Session transcript: `{src.name}`\n\n"
         "> **Rendered view — authoritative source is the sibling `.jsonl` file.**\n"
         "> Tool-use blocks are summarised (input truncated at 1500 chars). "
         "`thinking` blocks are omitted. System / attachment / snapshot records "
-        "are omitted. Each turn carries a `uuid=…` marker for append-merge.\n",
-    ]
+        "are omitted. Each turn carries a `uuid=…` marker for append-merge.\n"
+    )
+
+
+def render_full(src: Path, mode: str = "full") -> str:
+    lines: list[str] = [_header(src, mode)]
     turn = 0
     with src.open() as f:
         for raw in f:
@@ -119,26 +162,20 @@ def render_full(src: Path) -> str:
                 continue
             if rec.get("type") == "user":
                 turn += 1
-            chunk = render_record(rec, turn)
+            chunk = render_record(rec, turn, mode)
             if chunk:
                 lines.append(chunk)
     return "\n".join(lines)
 
 
-def render_append(src: Path, dst: Path) -> tuple[int, int]:
+def render_append(src: Path, dst: Path, mode: str = "full") -> tuple[int, int]:
     seen = existing_uuids(dst)
     turn_idx = count_user_turns(dst)
     added = 0
     scanned = 0
     with dst.open("a") if dst.exists() else dst.open("w") as out:
         if not seen:
-            out.write(f"# Session transcript: `{src.name}`\n\n")
-            out.write(
-                "> **Rendered view — authoritative source is the sibling "
-                "`.jsonl` file.**\n> Tool-use blocks are summarised. "
-                "`thinking` omitted. System/attachment/snapshot records "
-                "omitted. Each turn carries a `uuid=…` marker.\n"
-            )
+            out.write(_header(src, mode))
         with src.open() as f:
             for raw in f:
                 raw = raw.strip()
@@ -154,7 +191,7 @@ def render_append(src: Path, dst: Path) -> tuple[int, int]:
                     continue
                 if rec.get("type") == "user":
                     turn_idx += 1
-                chunk = render_record(rec, turn_idx)
+                chunk = render_record(rec, turn_idx, mode)
                 if chunk:
                     out.write(chunk)
                     added += 1
@@ -165,6 +202,9 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="render-jsonl")
     ap.add_argument("--append", action="store_true",
                     help="append only new records (by uuid)")
+    ap.add_argument("--mode", choices=("full", "conversation"), default="full",
+                    help="'full' = all tool-use summarised; "
+                         "'conversation' = user prompts + assistant text only")
     ap.add_argument("src", type=Path, help="path to the session .jsonl")
     ap.add_argument("dst", type=Path, nargs="?",
                     help="output .md (default: sibling of src)")
@@ -174,11 +214,11 @@ def main(argv: list[str]) -> int:
     dst.parent.mkdir(parents=True, exist_ok=True)
 
     if args.append:
-        added, scanned = render_append(args.src, dst)
-        print(f"append: scanned={scanned} new={added} -> {dst}")
+        added, scanned = render_append(args.src, dst, args.mode)
+        print(f"append[{args.mode}]: scanned={scanned} new={added} -> {dst}")
     else:
-        dst.write_text(render_full(args.src))
-        print(f"wrote {dst} ({dst.stat().st_size} bytes)")
+        dst.write_text(render_full(args.src, args.mode))
+        print(f"wrote[{args.mode}] {dst} ({dst.stat().st_size} bytes)")
     return 0
 
 
