@@ -5,7 +5,7 @@
 # survive a chezmoi apply.
 #
 # Managed keys (always overwritten with the values below):
-#   hooks, enabledPlugins, extraKnownMarketplaces
+#   hooks, enabledPlugins, extraKnownMarketplaces, permissions.allow
 #
 # Guards:
 #   1. jq must be on PATH; if missing, pass stdin through unchanged.
@@ -27,4 +27,8 @@ printf '%s\n' "$input" | jq \
   --arg cmd "$cmd" \
   '.hooks = {"SessionEnd": [{"hooks": [{"type": "command", "command": $cmd}]}]} |
    .enabledPlugins = {"claude-mem@thedotmack": true} |
-   .extraKnownMarketplaces = {"thedotmack": {"source": {"source": "github", "repo": "thedotmack/claude-mem"}}}'
+   .extraKnownMarketplaces = {"thedotmack": {"source": {"source": "github", "repo": "thedotmack/claude-mem"}}} |
+   .permissions.allow = [
+     "Bash(curl -H * ntfy.sh/*)",
+     "Bash(wsl-notify-send *)"
+   ]'
