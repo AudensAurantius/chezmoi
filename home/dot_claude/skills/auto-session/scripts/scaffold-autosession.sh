@@ -29,7 +29,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 
 TEMPLATE_CLAUDE_MD="$SKILL_DIR/templates/session-claude-md.md"
-TEMPLATE_RUN_SH="$SKILL_DIR/templates/run.sh.tmpl"
+TEMPLATE_RUN_SH="$SKILL_DIR/templates/run.sh.j2"
 TEMPLATE_SETTINGS_FRAGMENT="$SKILL_DIR/hooks/settings-fragment.json"
 HOOK_WRAPPER="$SKILL_DIR/scripts/lib/hook-wrapper.sh"
 
