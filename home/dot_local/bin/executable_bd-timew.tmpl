@@ -24,6 +24,8 @@ Subcommands:
   resolve <id>       Dry-run: print resolved billing tuple only
   cleanup            Commit, compact, and GC the active Beads project
   init-project       Apply preferred Beads config; register for auto-cleanup
+  servers            List all registered repos and their Dolt server status
+  server-stop        Gracefully stop the Dolt server for one or all repos
 
 Examples:
   bd-timew start J121-abc
@@ -305,6 +307,38 @@ def get_cli_arguments() -> argparse.Namespace:
             "based on its configured commit cadence."
         ),
         formatter_class=HelpFormatter,
+    )
+
+    # -- servers -------------------------------------------------------------
+    sub.add_parser(
+        "servers",
+        help="List all registered repos and their Dolt server status.",
+        description=(
+            f"Reads {REPOS_CONFIG} and runs `bd dolt status` in each registered "
+            "project directory. Reports whether the server is running, stopped, "
+            "or in embedded mode (server not applicable)."
+        ),
+        formatter_class=HelpFormatter,
+    )
+
+    # -- server-stop ---------------------------------------------------------
+    p_server_stop = sub.add_parser(
+        "server-stop",
+        help="Gracefully stop the Dolt server for one or all registered repos.",
+        description=(
+            "Runs `bd dolt stop` in the specified project directory. "
+            "If --path is omitted, stops servers for all registered repos."
+        ),
+        formatter_class=HelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  bd-timew server-stop                        # stop all\n"
+            "  bd-timew server-stop --path ~/Source/J121   # stop one\n"
+        ),
+    )
+    p_server_stop.add_argument(
+        "--path", type=Path, default=None,
+        help="Project root to stop. Omit to stop all registered repos.",
     )
 
     return parser.parse_args()
@@ -895,6 +929,88 @@ def cmd_run_service() -> None:
 
 
 # ---------------------------------------------------------------------------
+# servers / server-stop
+# ---------------------------------------------------------------------------
+
+def _bd_dolt_in(project_dir: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["bd", "dolt", *args],
+        cwd=project_dir,
+        capture_output=True,
+        text=True,
+    )
+
+
+def cmd_servers() -> None:
+    config = _load_repos_config()
+    repos = config.get("repos", [])
+    if not repos:
+        _root_log.info("No repos registered in %s", REPOS_CONFIG)
+        return
+
+    for repo in repos:
+        path = repo.get("path")
+        if not path:
+            continue
+        project_dir = Path(path)
+        if not project_dir.is_dir():
+            _root_log.warning("%s  [directory not found]", path)
+            continue
+
+        result = _bd_dolt_in(project_dir, "status")
+        combined = (result.stdout + result.stderr).lower()
+
+        if result.returncode == 0:
+            status_line = result.stdout.strip() or "running"
+            _root_log.info("%s  [%s]", path, status_line)
+        elif "not supported in embedded mode" in combined:
+            _root_log.info("%s  [embedded mode — no server]", path)
+        elif "not running" in combined or "no server" in combined:
+            _root_log.info("%s  [stopped]", path)
+        else:
+            detail = result.stderr.strip() or result.stdout.strip()
+            _root_log.info("%s  [unknown: %s]", path, detail)
+
+
+def cmd_server_stop(path: Path | None) -> None:
+    config = _load_repos_config()
+    repos = config.get("repos", [])
+
+    if path is not None:
+        targets = [str(path.resolve())]
+    else:
+        targets = [r.get("path") for r in repos if r.get("path")]
+
+    if not targets:
+        _root_log.info("No repos to stop (repos.yaml is empty or --path not found)")
+        return
+
+    for proj_path in targets:
+        project_dir = Path(proj_path)
+        if not project_dir.is_dir():
+            _root_log.warning("Skipping %s — directory not found", proj_path)
+            continue
+
+        result = _bd_dolt_in(project_dir, "stop")
+        combined = (result.stdout + result.stderr).lower()
+
+        if result.returncode == 0:
+            _root_log.info(
+                "%s  stopped (%s)",
+                proj_path, result.stdout.strip() or "ok",
+            )
+        elif "not supported in embedded mode" in combined:
+            _root_log.info("%s  [embedded mode — nothing to stop]", proj_path)
+        elif "not running" in combined or "no server" in combined:
+            _root_log.info("%s  [server was not running]", proj_path)
+        else:
+            _root_log.error(
+                "%s  stop failed: %s",
+                proj_path, result.stderr.strip() or result.stdout.strip(),
+            )
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -935,6 +1051,10 @@ def main() -> None:
         )
     elif args.cmd == "run-service":
         cmd_run_service()
+    elif args.cmd == "servers":
+        cmd_servers()
+    elif args.cmd == "server-stop":
+        cmd_server_stop(args.path)
 
 
 if __name__ == "__main__":
