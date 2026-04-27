@@ -46,6 +46,11 @@ Before saying "done", "fixed", "passing", "working", or any equivalent — in th
 - When a design decision is significant enough to affect the project's direction, flag it and suggest adding it to the project's decision log
 - Do not soften feedback to be polite; clarity matters more than comfort
 
+### Beads (bd) Performance
+
+- **Slow `bd` commands** (5-30s): caused by journal bloat or commit history growth in the embedded Dolt store. Fix: `bd compact --days 7 --force && bd gc --skip-decay --force`. Nuclear reset: `bd flatten --force && bd gc --skip-decay --force`. See `~/.claude/references/beads-performance.md`.
+- **New project setup**: always run `bd config set dolt.auto-commit batch` and `bd config set no-push true` after `bd init`. Add the daily maintenance cron (commit + compact + gc). Details in the reference file.
+
 ### Collaboration Preferences (see auto-memory for full context)
 
 - **Jira comments**: lead with context/methodology, integrate links, connect to team knowledge; avoid prescriptive "next steps" in analysis comments. See `feedback-jira-comment-style.md`.
