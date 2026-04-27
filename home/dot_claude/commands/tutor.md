@@ -1,7 +1,7 @@
 ---
 name: tutor
 description: Interactive technical primer on any topic — structured overview, trade-offs, examples, and follow-up paths; accepts optional reference materials
-argument-hint: "[<topic description>] [--reference <url-or-path-or-citation>]..."
+argument-hint: "[<topic description>] [--reference <url-or-path-or-citation>]... [--save <path>]"
 author: Michael Haynes
 scope: global
 tags: [learning, tutorial, documentation, exploration]
@@ -9,6 +9,10 @@ timestamps:
   - action: created
     at: "2026-04-23T00:00:00-05:00"
     actor: Michael Haynes
+  - action: modified
+    at: "2026-04-27T00:00:00-05:00"
+    actor: Michael Haynes
+    note: "Added --save/--file/--transcript flag for writing primer output to a file"
 comments:
   - "Source: redo build system primer session (2026-04-22); the five-section
     structure (overview / trade-offs / API / examples / follow-ups) produced a
@@ -30,11 +34,12 @@ related: [session-checkpoint]
 
 Extract from `$ARGUMENTS`:
 
-- **Topic**: all text that is not a `--reference` flag and its value. May be
+- **Topic**: all text that is not a `--reference` or `--save`/`--file`/`--transcript` flag and its value. May be
   empty if only `--reference` flags are present.
 - **References**: each `--reference <value>` where `<value>` is a URL, a local
   file path, or a plain citation string (author / title / year). Collect all
   of them; the flag may appear multiple times.
+- **Save path**: `--save <path>`, `--file <path>`, or `--transcript <path>` (all three are synonyms). If present, the primer output will be written to this file after Step 3. At most one save path may be specified.
 
 **Reference resolution** (do this before Step 1):
 - URL → fetch with WebFetch and read the content.
@@ -142,6 +147,23 @@ After the main content, add a **Further Exploration** section with:
   by the user, note related works cited within them.
 - If the session revealed an open question or genuine uncertainty, name it
   explicitly rather than papering over it.
+
+## Step 4 — Save output (only if --save/--file/--transcript was supplied)
+
+If no save path was specified, skip this step entirely.
+
+1. **Check whether the file exists** using the Bash tool: `test -f <path> && echo exists || echo new`.
+
+2. **If the file does not exist**: write the primer output directly with the Write tool. Confirm in one line: `Saved to <path>`.
+
+3. **If the file already exists**: do NOT write yet. Tell the user:
+   > `<path>` already exists. Default: **append** the primer below the existing content. Alternatives: **overwrite** (replaces the file) or **skip** (don't save).
+   >
+   > Reply with `append`, `overwrite`, or `skip` — or just press Enter to append.
+
+   Then wait for the user's reply before acting. On `append` (or empty/Enter): use Bash to append (`cat >> <path>`). On `overwrite`: use the Write tool. On `skip`: confirm skipped, do nothing.
+
+4. **Content to write**: the primer only — Sections 1–4 (and Section 5 if it was produced), the Further Exploration section, and nothing else. Do not include the clarifying-question exchange, tool-use output, or this confirmation dialogue.
 
 ## Invariants
 
