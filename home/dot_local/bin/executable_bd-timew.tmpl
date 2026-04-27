@@ -1,73 +1,312 @@
 {{ if and (lookPath "bd") (lookPath "timew") -}}
 #!/usr/bin/env python3
-"""bd-timew: bridge between Beads issues and Timewarrior intervals.
+"""bd-timew: Beads + Timewarrior bridge with project lifecycle management.
 
-Reads a per-DB sidecar config (.beads/bd-timew.yaml), resolves a Beads
-issue's labels to a NetSuite (client, case, svc) tuple, and starts/stops
-a Timewarrior interval tagged accordingly. Also claims the issue in Beads
-on start.
+Resolves a Beads issue's labels to a NetSuite (client, case, svc) billing
+tuple via a per-project sidecar (.beads/bd-timew.yaml), then starts or stops
+a Timewarrior interval tagged accordingly.
 
-Resolution order (first wins, merged onto default):
-  1. Per-issue `case:<string>` label (escape hatch)
-  2. First matching rule in `patterns:` (regex on space-joined label list)
-  3. `default:` block in the sidecar
-  4. Hardcoded global (svc = "Technology Services")
+Also provides project maintenance commands: cleanup (daily Dolt commit,
+rolling history compaction, GC) and init-project (apply preferred Beads
+config and register a project for automated cleanup via a systemd user timer).
 
-Usage:
-  bd-timew start <issue-id>    # claim + timew start, tagged with resolved tuple
-  bd-timew stop                # timew stop (no status change in Beads)
-  bd-timew switch <issue-id>   # stop current interval, then start on <issue-id>
-  bd-timew status              # show current interval's bead + tuple + elapsed
-  bd-timew resolve <issue-id>  # dry-run: print the resolved tuple only
+Resolution order for billing tuple (first match wins):
+  1. Per-issue  case:<string>  label (escape hatch)
+  2. First matching rule in  patterns:  (regex on space-joined label list)
+  3.  default:  block in the sidecar
+  4. Hardcoded global fallback (svc = "Technology Services")
+
+Subcommands:
+  start <id>         Claim issue + start Timewarrior interval
+  stop               Stop current Timewarrior interval
+  switch <id>        Stop current interval, start a new one
+  status             Show active interval bead, tuple, and elapsed time
+  resolve <id>       Dry-run: print resolved billing tuple only
+  cleanup            Commit, compact, and GC the active Beads project
+  init-project       Apply preferred Beads config; register for auto-cleanup
+
+Examples:
+  bd-timew start J121-abc
+  bd-timew cleanup --days 7
+  bd-timew init-project --path /home/user/Source/MyProject --install-systemd
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
 import json
+import logging
+import logging.handlers
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from rich.console import Console
+from rich.logging import RichHandler
 
 try:
     import yaml
 except ModuleNotFoundError:
     sys.exit(
-        "bd-timew: PyYAML not available. Install with `pip install --user pyyaml` "
-        "or ensure the interpreter on PATH has it."
+        "bd-timew: PyYAML not available. "
+        "Install with `pip install --user pyyaml`."
     )
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
 GLOBAL_SVC_DEFAULT = "Technology Services"
+SYSTEMD_SERVICE_NAME = "bd-timew-cleanup"
+REPOS_CONFIG = Path.home() / ".config" / "bd-timew" / "repos.yaml"
+CLEANUP_STATE = Path.home() / ".cache" / "bd-timew" / "cleanup-state.json"
+CLEANUP_LOG = Path.home() / ".cache" / "bd-timew" / "cleanup.log"
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+# Root logger: stderr via RichHandler (all subcommands).
+_root_log = logging.getLogger("bd-timew")
+
+# Cleanup sub-logger: propagates to root (-> stderr) and also writes to the
+# rotating log file when the file handler is attached in setup_logger().
+_cleanup_log = logging.getLogger("bd-timew.cleanup")
 
 
-def run(cmd: list[str], *, check: bool = True, capture: bool = False):
-    """Thin subprocess wrapper."""
-    return subprocess.run(
-        cmd, check=check, text=True,
-        capture_output=capture,
+class HelpFormatter(
+    argparse.RawDescriptionHelpFormatter,
+    argparse.ArgumentDefaultsHelpFormatter,
+):
+    """Preserve description/epilog whitespace and show argument defaults."""
+
+
+def setup_logger(loglevel: str, *, enable_file_handler: bool = False) -> None:
+    level = getattr(logging, loglevel.upper(), logging.INFO)
+    _root_log.setLevel(level)
+    _root_log.addHandler(
+        RichHandler(
+            level=level,
+            console=Console(stderr=True),
+            show_path=False,
+            rich_tracebacks=True,
+        )
+    )
+    if enable_file_handler:
+        CLEANUP_LOG.parent.mkdir(parents=True, exist_ok=True)
+        fh = logging.handlers.RotatingFileHandler(
+            CLEANUP_LOG, maxBytes=1_000_000, backupCount=3
+        )
+        fh.setLevel(level)
+        fh.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+        )
+        _cleanup_log.addHandler(fh)
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def get_cli_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="bd-timew",
+        description=__doc__,
+        formatter_class=HelpFormatter,
+    )
+    parser.add_argument(
+        "--loglevel", "-l",
+        default="INFO",
+        type=lambda v: v.strip().upper(),
+        help="Logging verbosity (DEBUG, INFO, WARNING, ERROR).",
     )
 
+    sub = parser.add_subparsers(dest="cmd", required=True)
 
-def find_beads_dir() -> Path:
-    """Use `bd where` to locate the active beads workspace."""
+    # -- start ---------------------------------------------------------------
+    p_start = sub.add_parser(
+        "start",
+        help="Claim a Beads issue and start a Timewarrior interval.",
+        description=(
+            "Resolves the billing tuple for <issue-id>, claims it in Beads "
+            "(if not already in_progress), and starts a tagged Timewarrior interval."
+        ),
+        formatter_class=HelpFormatter,
+    )
+    p_start.add_argument("issue_id", metavar="<issue-id>")
+
+    # -- stop ----------------------------------------------------------------
+    sub.add_parser(
+        "stop",
+        help="Stop the current Timewarrior interval.",
+        formatter_class=HelpFormatter,
+    )
+
+    # -- switch --------------------------------------------------------------
+    p_switch = sub.add_parser(
+        "switch",
+        help="Stop current interval and start a new one on <issue-id>.",
+        description=(
+            "Equivalent to  stop  then  start <issue-id>. Not transactional: "
+            "if start fails after stop succeeds, re-run  bd-timew start <id>  to recover."
+        ),
+        formatter_class=HelpFormatter,
+    )
+    p_switch.add_argument("issue_id", metavar="<issue-id>")
+
+    # -- status --------------------------------------------------------------
+    sub.add_parser(
+        "status",
+        help="Show the active interval's bead, billing tuple, and elapsed time.",
+        formatter_class=HelpFormatter,
+    )
+
+    # -- resolve -------------------------------------------------------------
+    p_resolve = sub.add_parser(
+        "resolve",
+        help="Print the resolved billing tuple without starting Timewarrior.",
+        description=(
+            "Dry-run variant of  start. Useful for verifying tuple resolution "
+            "before committing to a billing entry."
+        ),
+        formatter_class=HelpFormatter,
+    )
+    p_resolve.add_argument("issue_id", metavar="<issue-id>")
+
+    # -- cleanup -------------------------------------------------------------
+    p_cleanup = sub.add_parser(
+        "cleanup",
+        help="Commit pending Dolt changes, compact history, and run GC.",
+        description=(
+            "Runs the three-phase Beads maintenance sequence for the active "
+            "project (or --project-dir):\n"
+            "  1. bd dolt commit  — seal pending writes into one commit\n"
+            "  2. bd compact      — squash commits older than --days\n"
+            "  3. bd gc           — compact journal, reclaim disk space\n\n"
+            "This command is also the body of the systemd service installed "
+            "by  init-project --install-systemd."
+        ),
+        formatter_class=HelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  bd-timew cleanup\n"
+            "  bd-timew cleanup --days 14\n"
+            "  bd-timew cleanup --skip-commit --project-dir ~/Source/Other\n"
+        ),
+    )
+    p_cleanup.add_argument(
+        "--days", type=int, default=7,
+        help="Retain this many days of Dolt commit history.",
+    )
+    p_cleanup.add_argument(
+        "--skip-commit", action="store_true",
+        help="Skip  bd dolt commit  (useful when the working set is clean).",
+    )
+    p_cleanup.add_argument(
+        "--project-dir", type=Path, default=None,
+        help="Project root containing .beads/. Defaults to the active Beads workspace.",
+    )
+
+    # -- init-project --------------------------------------------------------
+    p_init = sub.add_parser(
+        "init-project",
+        help="Apply preferred Beads config and register for auto-cleanup.",
+        description=(
+            "Configures a Beads project with recommended settings "
+            "(batch commits, no auto-push) and optionally registers it in\n"
+            f"{REPOS_CONFIG}\n"
+            "for the systemd cleanup timer.\n\n"
+            "Idempotent: safe to re-run; existing config values and registry "
+            "entries are not duplicated."
+        ),
+        formatter_class=HelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  bd-timew init-project\n"
+            "  bd-timew init-project --path ~/Source/Other --days 14 --no-git-ops\n"
+            "  bd-timew init-project --install-systemd\n"
+        ),
+    )
+    p_init.add_argument(
+        "--path", type=Path, default=None,
+        help="Project root containing .beads/. Defaults to the active Beads workspace.",
+    )
+    p_init.add_argument(
+        "--days", type=int, default=7,
+        help="Rolling history window (days) stored in repos.yaml for this project.",
+    )
+    p_init.add_argument(
+        "--commit-cadence", type=str, default="1d",
+        help="How often to commit (e.g. 1d, 7d, 12h). Stored in repos.yaml.",
+    )
+    p_init.add_argument(
+        "--no-git-ops", action="store_true",
+        help=(
+            "Set no-git-ops=true in Beads config (suppress git ops on the outer "
+            "repo). Recommended when .beads/ is a nested git repo."
+        ),
+    )
+    p_init.add_argument(
+        "--install-systemd", action="store_true",
+        help=(
+            "Write ~/.config/systemd/user/bd-timew-cleanup.{service,timer} and "
+            "enable the timer. Unit files are only created if absent."
+        ),
+    )
+    p_init.add_argument(
+        "--check-interval", type=str, default="daily",
+        help=(
+            "systemd OnCalendar value for the timer (only used when creating "
+            "the timer unit for the first time)."
+        ),
+    )
+
+    # -- run-service (internal; invoked by the systemd service unit) ---------
+    sub.add_parser(
+        "run-service",
+        help=argparse.SUPPRESS,
+        description=(
+            "Internal entrypoint called by the systemd service unit. Iterates "
+            f"{REPOS_CONFIG} and runs cleanup for each project that is due "
+            "based on its configured commit cadence."
+        ),
+        formatter_class=HelpFormatter,
+    )
+
+    return parser.parse_args()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def run(
+    cmd: list[str], *, check: bool = True, capture: bool = False
+) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, check=check, text=True, capture_output=capture)
+
+
+def find_beads_dir(project_dir: Path | None = None) -> Path:
+    if project_dir is not None:
+        candidate = project_dir / ".beads"
+        if not candidate.is_dir():
+            sys.exit(f"bd-timew: no .beads/ directory found under {project_dir}")
+        return candidate
     result = run(["bd", "where"], check=False, capture=True)
     if result.returncode != 0:
         sys.exit(
-            "bd-timew: no active beads workspace. cd into a project with a "
-            ".beads/ directory, or set BEADS_DIR."
+            "bd-timew: no active Beads workspace. cd into a project with "
+            ".beads/, or pass --project-dir."
         )
-    first_line = result.stdout.strip().split("\n", 1)[0].strip()
-    return Path(first_line)
+    return Path(result.stdout.strip().split("\n", 1)[0].strip())
 
 
 def load_sidecar(beads_dir: Path) -> dict:
     path = beads_dir / "bd-timew.yaml"
     if not path.exists():
-        print(
-            f"bd-timew: warning: no sidecar at {path}; using minimal defaults.",
-            file=sys.stderr,
-        )
+        _root_log.warning("no sidecar at %s; using minimal defaults", path)
         return {"default": {}, "patterns": []}
     with path.open() as f:
         data = yaml.safe_load(f) or {}
@@ -77,9 +316,7 @@ def load_sidecar(beads_dir: Path) -> dict:
 
 
 def get_issue(issue_id: str) -> dict:
-    result = run(
-        ["bd", "show", issue_id, "--json"], check=False, capture=True
-    )
+    result = run(["bd", "show", issue_id, "--json"], check=False, capture=True)
     if result.returncode != 0:
         sys.exit(f"bd-timew: `bd show {issue_id}` failed:\n{result.stderr}")
     data = json.loads(result.stdout)
@@ -92,12 +329,11 @@ def get_issue(issue_id: str) -> dict:
 
 def resolve_tuple(labels: list[str], sidecar: dict) -> dict:
     default = dict(sidecar.get("default") or {})
-    tuple_ = {
+    tuple_: dict[str, str | None] = {
         "client": default.get("client"),
         "case": default.get("case"),
         "svc": default.get("svc") or GLOBAL_SVC_DEFAULT,
     }
-
     label_str = " ".join(labels)
     for rule in sidecar.get("patterns") or []:
         pattern = rule.get("match")
@@ -113,34 +349,29 @@ def resolve_tuple(labels: list[str], sidecar: dict) -> dict:
                         val = val.format(**groups)
                     tuple_[key] = val
             break
-
-    # Escape hatch: per-issue `case:` label overrides pattern-derived case.
     for label in labels:
         if label.startswith("case:"):
             tuple_["case"] = label[len("case:"):]
             break
-
     return tuple_
 
 
-def print_resolution(issue: dict, labels: list[str], tuple_: dict) -> None:
-    issue_id = issue.get("id", "?")
-    title = issue.get("title", "")
-    print(f"Issue:  {issue_id}  {title}")
-    print(f"Labels: {', '.join(labels) or '(none)'}")
-    print(f"Client: {tuple_['client'] or '(none)'}")
-    print(f"Case:   {tuple_['case'] or '(none)'}")
-    print(f"Svc:    {tuple_['svc'] or '(none)'}")
+# ---------------------------------------------------------------------------
+# Subcommand implementations
+# ---------------------------------------------------------------------------
 
-
-def cmd_start(issue_id: str, dry_run: bool = False) -> None:
+def cmd_start(issue_id: str, *, dry_run: bool = False) -> None:
     beads_dir = find_beads_dir()
     sidecar = load_sidecar(beads_dir)
     issue = get_issue(issue_id)
-    labels = issue.get("labels") or []
+    labels: list[str] = issue.get("labels") or []
     tuple_ = resolve_tuple(labels, sidecar)
 
-    print_resolution(issue, labels, tuple_)
+    _root_log.info("Issue:  %s  %s", issue.get("id", "?"), issue.get("title", ""))
+    _root_log.info("Labels: %s", ", ".join(labels) or "(none)")
+    _root_log.info("Client: %s", tuple_["client"] or "(none)")
+    _root_log.info("Case:   %s", tuple_["case"] or "(none)")
+    _root_log.info("Svc:    %s", tuple_["svc"] or "(none)")
 
     if dry_run:
         return
@@ -157,7 +388,6 @@ def cmd_start(issue_id: str, dry_run: bool = False) -> None:
     title = issue.get("title", "")
     if title:
         run(["timew", "annotate", f"{issue_id}: {title}"])
-
     if issue.get("status") != "in_progress":
         run(["bd", "update", issue_id, "--claim"], check=False)
 
@@ -167,30 +397,18 @@ def cmd_stop() -> None:
 
 
 def cmd_switch(issue_id: str) -> None:
-    """Stop the current interval (if any) and start a new one on issue_id.
-
-    Not transactional: if `start` fails after `stop` succeeds, no interval
-    will be running. Re-run `bd-timew start <id>` to recover.
-    """
     cmd_stop()
     cmd_start(issue_id)
 
 
 def _timew_get(key: str) -> str | None:
-    """Return the value of a timew DOM key, or None if unset/unavailable."""
     result = run(["timew", "get", key], check=False, capture=True)
     if result.returncode != 0:
         return None
-    value = result.stdout.strip()
-    return value or None
+    return result.stdout.strip() or None
 
 
 def _format_elapsed(start_iso: str) -> str:
-    """Format elapsed time since a timew `dom.active.start` timestamp.
-
-    timew emits this DOM key in local time as 'YYYY-MM-DDTHH:MM:SS' (naive)
-    and may also return compact UTC 'YYYYMMDDTHHMMSSZ' in some contexts.
-    """
     compact = re.fullmatch(r"(\d{8})T(\d{6})Z", start_iso)
     if compact:
         date_part, time_part = compact.groups()
@@ -209,32 +427,21 @@ def _format_elapsed(start_iso: str) -> str:
     total_seconds = int(delta.total_seconds())
     hours, remainder = divmod(total_seconds, 3600)
     minutes, _ = divmod(remainder, 60)
-    if hours:
-        return f"{hours}h {minutes:02d}m"
-    return f"{minutes}m"
+    return f"{hours}h {minutes:02d}m" if hours else f"{minutes}m"
 
 
 def cmd_status() -> None:
-    """Show the currently tracked bead, tuple, and elapsed time."""
     start_iso = _timew_get("dom.active.start")
     if not start_iso:
-        print("bd-timew: no active timew interval.")
+        _root_log.info("no active timew interval")
         return
 
-    tag_count_raw = _timew_get("dom.active.tag.count") or "0"
-    try:
-        tag_count = int(tag_count_raw)
-    except ValueError:
-        tag_count = 0
-    tags = []
-    # timew DOM tags are 1-indexed.
-    for i in range(1, tag_count + 1):
-        tag = _timew_get(f"dom.active.tag.{i}")
-        if tag:
-            tags.append(tag)
+    tag_count = int(_timew_get("dom.active.tag.count") or "0")
+    tags = [
+        t for i in range(1, tag_count + 1)
+        if (t := _timew_get(f"dom.active.tag.{i}"))
+    ]
 
-    # First tag without a colon is treated as the bead id (the start tuple
-    # tags all use key:value form: client:*, case:*, svc:*, billable:*).
     bead_id = next((t for t in tags if ":" not in t), None)
     elapsed = _format_elapsed(start_iso)
 
@@ -246,58 +453,323 @@ def cmd_status() -> None:
             pass
         title = (issue or {}).get("title", "")
         status = (issue or {}).get("status", "")
-        header = f"Tracking: {bead_id}"
-        if title:
-            header += f"  {title}"
-        print(header)
+        _root_log.info("Tracking: %s  %s", bead_id, title)
         if status:
-            print(f"Status:   {status}")
+            _root_log.info("Status:   %s", status)
     else:
-        print("Tracking: (no bead tag found on active interval)")
+        _root_log.info("Tracking: (no bead tag found on active interval)")
 
-    print(f"Elapsed:  {elapsed}")
+    _root_log.info("Elapsed:  %s", elapsed)
 
-    tuple_display = {
-        "client": None,
-        "case": None,
-        "svc": None,
-    }
+    tuple_display: dict[str, str | None] = {"client": None, "case": None, "svc": None}
     for tag in tags:
         for key in tuple_display:
-            prefix = f"{key}:"
-            if tag.startswith(prefix):
-                tuple_display[key] = tag[len(prefix):]
-    print(f"Client:   {tuple_display['client'] or '(none)'}")
-    print(f"Case:     {tuple_display['case'] or '(none)'}")
-    print(f"Svc:      {tuple_display['svc'] or '(none)'}")
+            if tag.startswith(f"{key}:"):
+                tuple_display[key] = tag[len(f"{key}:"):]
+    _root_log.info("Client:   %s", tuple_display["client"] or "(none)")
+    _root_log.info("Case:     %s", tuple_display["case"] or "(none)")
+    _root_log.info("Svc:      %s", tuple_display["svc"] or "(none)")
 
+
+def cmd_cleanup(
+    days: int,
+    *,
+    skip_commit: bool = False,
+    project_dir: Path | None = None,
+) -> None:
+    beads_dir = find_beads_dir(project_dir)
+    log = logging.LoggerAdapter(
+        _cleanup_log,
+        extra={"project": str(beads_dir.parent)},
+    )
+    bd = ["bd", "--db", str(beads_dir / "embeddeddolt" / beads_dir.parent.name)]
+
+    log.info("Starting cleanup (days=%d, skip_commit=%s)", days, skip_commit)
+
+    if not skip_commit:
+        log.info("Phase 1/3: dolt commit")
+        result = run([*bd, "dolt", "commit"], check=False, capture=True)
+        if result.returncode != 0:
+            log.warning(
+                "dolt commit: %s",
+                result.stderr.strip() or result.stdout.strip(),
+            )
+        else:
+            log.info("dolt commit: %s", result.stdout.strip())
+    else:
+        log.info("Phase 1/3: dolt commit (skipped)")
+
+    log.info("Phase 2/3: compact --days %d", days)
+    result = run(
+        [*bd, "compact", f"--days={days}", "--force"], check=False, capture=True
+    )
+    if result.returncode != 0:
+        log.error("compact failed: %s", result.stderr.strip())
+    else:
+        log.info("compact: %s", result.stdout.strip())
+
+    log.info("Phase 3/3: gc")
+    result = run(
+        [*bd, "gc", "--skip-decay", "--force"], check=False, capture=True
+    )
+    if result.returncode != 0:
+        log.error("gc failed: %s", result.stderr.strip())
+    else:
+        log.info("gc: %s", result.stdout.strip())
+
+    log.info("Cleanup complete")
+
+
+# ---------------------------------------------------------------------------
+# Repos config and state helpers
+# ---------------------------------------------------------------------------
+
+def _load_repos_config() -> dict:
+    if not REPOS_CONFIG.exists():
+        return {"global": {}, "repos": []}
+    with REPOS_CONFIG.open() as f:
+        data = yaml.safe_load(f) or {}
+    data.setdefault("global", {})
+    data.setdefault("repos", [])
+    return data
+
+
+def _save_repos_config(data: dict) -> None:
+    REPOS_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    with REPOS_CONFIG.open("w") as f:
+        yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+
+
+def _load_cleanup_state() -> dict:
+    if not CLEANUP_STATE.exists():
+        return {}
+    with CLEANUP_STATE.open() as f:
+        return json.load(f)
+
+
+def _save_cleanup_state(state: dict) -> None:
+    CLEANUP_STATE.parent.mkdir(parents=True, exist_ok=True)
+    with CLEANUP_STATE.open("w") as f:
+        json.dump(state, f, indent=2, default=str)
+
+
+def _parse_cadence(cadence_str: str) -> dt.timedelta:
+    """Parse a cadence string like '1d', '7d', '12h' into a timedelta."""
+    m = re.fullmatch(r"(\d+)([dhm])", cadence_str.strip())
+    if not m:
+        sys.exit(
+            f"bd-timew: invalid cadence '{cadence_str}' — use e.g. 1d, 7d, 12h"
+        )
+    value, unit = int(m.group(1)), m.group(2)
+    return {
+        "d": dt.timedelta(days=value),
+        "h": dt.timedelta(hours=value),
+        "m": dt.timedelta(minutes=value),
+    }[unit]
+
+
+# ---------------------------------------------------------------------------
+# init-project
+# ---------------------------------------------------------------------------
+
+_SERVICE_TEMPLATE = """\
+[Unit]
+Description=bd-timew Beads cleanup (commit, compact, GC) for all registered projects
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart={bd_timew_path} run-service
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+"""
+
+_TIMER_TEMPLATE = """\
+[Unit]
+Description=Run bd-timew Beads cleanup on a regular schedule
+
+[Timer]
+OnCalendar={check_interval}
+Persistent=true
+Unit={service_name}.service
+
+[Install]
+WantedBy=timers.target
+"""
+
+_INTERVAL_ALIASES: dict[str, str] = {
+    "daily": "1d",
+    "weekly": "7d",
+    "hourly": "1h",
+}
+
+
+def cmd_init_project(
+    path: Path | None,
+    days: int,
+    commit_cadence: str,
+    no_git_ops: bool,
+    install_systemd: bool,
+    check_interval: str,
+) -> None:
+    beads_dir = find_beads_dir(path)
+    project_path = str(beads_dir.parent.resolve())
+    _root_log.info("Initialising Beads project at %s", project_path)
+
+    settings: list[tuple[str, str]] = [
+        ("dolt.auto-commit", "batch"),
+        ("no-push", "true"),
+    ]
+    if no_git_ops:
+        settings.append(("no-git-ops", "true"))
+
+    for key, value in settings:
+        result = run(
+            ["bd", "config", "set", key, value], check=False, capture=True
+        )
+        if result.returncode != 0:
+            _root_log.warning(
+                "config set %s=%s failed: %s", key, value, result.stderr.strip()
+            )
+        else:
+            _root_log.info("config set %s=%s", key, value)
+
+    # Register in repos.yaml (idempotent)
+    config = _load_repos_config()
+    existing_paths = [r.get("path") for r in config["repos"]]
+    if project_path not in existing_paths:
+        config["repos"].append({
+            "path": project_path,
+            "commit_cadence": commit_cadence,
+            "compact_days": days,
+        })
+        _save_repos_config(config)
+        _root_log.info("Registered in %s", REPOS_CONFIG)
+    else:
+        _root_log.info("Already registered in %s (not duplicated)", REPOS_CONFIG)
+
+    # Warn if the timer check interval is coarser than this repo's commit cadence
+    global_interval = config["global"].get("check_interval", check_interval)
+    try:
+        interval_td = _parse_cadence(
+            _INTERVAL_ALIASES.get(global_interval, global_interval)
+        )
+        repo_cadence_td = _parse_cadence(commit_cadence)
+        if interval_td > repo_cadence_td:
+            _root_log.warning(
+                "check_interval '%s' is coarser than commit_cadence '%s' — "
+                "commits for this project may be delayed",
+                global_interval, commit_cadence,
+            )
+    except SystemExit:
+        pass  # non-parseable interval string (e.g. custom OnCalendar); skip
+
+    if not install_systemd:
+        return
+
+    # Write systemd unit files (idempotent — only if absent)
+    systemd_dir = Path.home() / ".config" / "systemd" / "user"
+    systemd_dir.mkdir(parents=True, exist_ok=True)
+    service_path = systemd_dir / f"{SYSTEMD_SERVICE_NAME}.service"
+    timer_path = systemd_dir / f"{SYSTEMD_SERVICE_NAME}.timer"
+    bd_timew_path = shutil.which("bd-timew") or sys.argv[0]
+
+    if not service_path.exists():
+        service_path.write_text(
+            _SERVICE_TEMPLATE.format(bd_timew_path=bd_timew_path)
+        )
+        _root_log.info("Wrote %s", service_path)
+    else:
+        _root_log.info("Service unit already exists, skipping: %s", service_path)
+
+    if not timer_path.exists():
+        config["global"]["check_interval"] = check_interval
+        _save_repos_config(config)
+        timer_path.write_text(
+            _TIMER_TEMPLATE.format(
+                check_interval=check_interval,
+                service_name=SYSTEMD_SERVICE_NAME,
+            )
+        )
+        _root_log.info("Wrote %s", timer_path)
+    else:
+        _root_log.info("Timer unit already exists, skipping: %s", timer_path)
+
+    result = run(
+        ["systemctl", "--user", "daemon-reload"], check=False, capture=True
+    )
+    if result.returncode != 0:
+        _root_log.error("daemon-reload failed: %s", result.stderr.strip())
+        return
+
+    result = run(
+        ["systemctl", "--user", "enable", "--now",
+         f"{SYSTEMD_SERVICE_NAME}.timer"],
+        check=False, capture=True,
+    )
+    if result.returncode != 0:
+        _root_log.error("enable --now failed: %s", result.stderr.strip())
+    else:
+        _root_log.info("Timer enabled and started: %s.timer", SYSTEMD_SERVICE_NAME)
+
+
+# ---------------------------------------------------------------------------
+# run-service (systemd entrypoint)
+# ---------------------------------------------------------------------------
+
+def cmd_run_service() -> None:
+    config = _load_repos_config()
+    state = _load_cleanup_state()
+    now = dt.datetime.now(dt.timezone.utc)
+
+    for repo in config.get("repos", []):
+        path = repo.get("path")
+        if not path:
+            _cleanup_log.warning("repos.yaml entry missing 'path', skipping")
+            continue
+
+        cadence_str = repo.get("commit_cadence", "1d")
+        cadence = _parse_cadence(cadence_str)
+        last_run_str = state.get(path, {}).get("last_run")
+        last_run = (
+            dt.datetime.fromisoformat(last_run_str).replace(tzinfo=dt.timezone.utc)
+            if last_run_str
+            else dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+        )
+
+        if now - last_run < cadence:
+            _cleanup_log.info(
+                "%s: next cleanup in %s, skipping",
+                path, cadence - (now - last_run),
+            )
+            continue
+
+        _cleanup_log.info("%s: due for cleanup (cadence=%s)", path, cadence_str)
+        try:
+            cmd_cleanup(
+                days=repo.get("compact_days", 7),
+                project_dir=Path(path),
+            )
+            state.setdefault(path, {})["last_run"] = now.isoformat()
+            _save_cleanup_state(state)
+        except Exception:
+            _cleanup_log.exception("cleanup failed for %s", path)
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="bd-timew")
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
-    p_start = sub.add_parser("start", help="start Timewarrior + claim issue")
-    p_start.add_argument("issue_id")
-
-    sub.add_parser("stop", help="stop current Timewarrior interval")
-
-    p_switch = sub.add_parser(
-        "switch",
-        help="stop current interval and start a new one on <issue_id>",
-    )
-    p_switch.add_argument("issue_id")
-
-    sub.add_parser(
-        "status",
-        help="show the current interval's bead, tuple, and elapsed time",
+    args = get_cli_arguments()
+    setup_logger(
+        args.loglevel,
+        enable_file_handler=args.cmd in ("cleanup", "run-service"),
     )
 
-    p_resolve = sub.add_parser(
-        "resolve", help="print resolved billing tuple without starting timew"
-    )
-    p_resolve.add_argument("issue_id")
-
-    args = parser.parse_args()
     if args.cmd == "start":
         cmd_start(args.issue_id)
     elif args.cmd == "stop":
@@ -308,6 +780,23 @@ def main() -> None:
         cmd_status()
     elif args.cmd == "resolve":
         cmd_start(args.issue_id, dry_run=True)
+    elif args.cmd == "cleanup":
+        cmd_cleanup(
+            args.days,
+            skip_commit=args.skip_commit,
+            project_dir=args.project_dir,
+        )
+    elif args.cmd == "init-project":
+        cmd_init_project(
+            path=args.path,
+            days=args.days,
+            commit_cadence=args.commit_cadence,
+            no_git_ops=args.no_git_ops,
+            install_systemd=args.install_systemd,
+            check_interval=args.check_interval,
+        )
+    elif args.cmd == "run-service":
+        cmd_run_service()
 
 
 if __name__ == "__main__":
