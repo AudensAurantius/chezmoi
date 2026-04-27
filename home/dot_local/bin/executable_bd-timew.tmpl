@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import getpass
 import json
 import logging
 import logging.handlers
@@ -63,6 +64,15 @@ SYSTEMD_SERVICE_NAME = "bd-timew-cleanup"
 REPOS_CONFIG = Path.home() / ".config" / "bd-timew" / "repos.yaml"
 CLEANUP_STATE = Path.home() / ".cache" / "bd-timew" / "cleanup-state.json"
 CLEANUP_LOG = Path.home() / ".cache" / "bd-timew" / "cleanup.log"
+
+# Marker used to detect an existing server-mode stanza in .envrc (idempotency).
+_ENVRC_MARKER = "# bd-timew: beads dolt server"
+_ENVRC_STANZA = """\
+# bd-timew: beads dolt server — managed by bd-timew init-project
+# Re-run bd-timew init-project --server to update.
+bd dolt status &>/dev/null || bd dolt start
+export BEADS_DOLT_PASSWORD="$(pass show {pass_path} | head -1)"
+"""
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -259,6 +269,29 @@ def get_cli_arguments() -> argparse.Namespace:
         help=(
             "systemd OnCalendar value for the timer (only used when creating "
             "the timer unit for the first time)."
+        ),
+    )
+    p_init.add_argument(
+        "--server", action=argparse.BooleanOptionalAction, default=True,
+        help=(
+            "Configure the project for Dolt server mode: set a project-specific "
+            "Dolt user, provision a pass entry for the password, and write a "
+            "direnv stanza to .envrc that starts the server on directory entry. "
+            "Requires the dolt binary on PATH. Use --no-server to skip."
+        ),
+    )
+    p_init.add_argument(
+        "--dolt-user", type=str, default=None,
+        help=(
+            "MySQL username for the Dolt server. "
+            "Defaults to the project directory name (lower-cased)."
+        ),
+    )
+    p_init.add_argument(
+        "--pass-path", type=str, default=None,
+        help=(
+            "pass store path for the Dolt password "
+            "(e.g. 'beads/j121'). Prompted interactively if not given."
         ),
     )
 
@@ -606,6 +639,66 @@ _INTERVAL_ALIASES: dict[str, str] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Server-mode helpers
+# ---------------------------------------------------------------------------
+
+def _pass_entry_exists(pass_path: str) -> bool:
+    return run(["pass", "show", pass_path], check=False, capture=True).returncode == 0
+
+
+def _provision_pass_entry(pass_path: str) -> None:
+    """Ensure a pass entry exists at pass_path; create one if not."""
+    if _pass_entry_exists(pass_path):
+        _root_log.info("pass entry already exists at %s", pass_path)
+        return
+
+    _root_log.info("No pass entry found at %s", pass_path)
+    choice = input("Generate a random password with `pass generate`? [Y/n]: ").strip().lower()
+
+    if choice in ("", "y", "yes"):
+        # pass generate writes to the store and prints the password to the
+        # terminal. --no-symbols avoids special chars that might need quoting
+        # in shell contexts, though Dolt handles any password fine over the
+        # MySQL wire protocol.
+        run(["pass", "generate", "--no-symbols", pass_path, "32"])
+        _root_log.info("Generated password stored at %s", pass_path)
+    else:
+        # getpass reads from /dev/tty directly (independent of stdin
+        # redirection), then we hand the value to `pass insert --multiline`
+        # via subprocess stdin. --multiline is the only pass insert variant
+        # that reads stdin; --echo and the default both open /dev/tty and
+        # cannot be piped.
+        password = getpass.getpass(f"Enter password for {pass_path}: ")
+        subprocess.run(
+            ["pass", "insert", "--multiline", "--force", pass_path],
+            input=password + "\n",
+            text=True,
+            check=True,
+        )
+        _root_log.info("Stored password at %s", pass_path)
+
+
+def _update_envrc(project_path: Path, pass_path: str) -> None:
+    """Append the Dolt server stanza to .envrc; idempotent."""
+    envrc = project_path / ".envrc"
+    stanza = _ENVRC_STANZA.format(pass_path=pass_path)
+
+    if envrc.exists():
+        content = envrc.read_text()
+        if _ENVRC_MARKER in content:
+            _root_log.info(".envrc already contains Dolt server stanza (not duplicated)")
+            return
+        envrc.write_text(content.rstrip("\n") + "\n\n" + stanza)
+    else:
+        envrc.write_text(stanza)
+
+    _root_log.info("Updated %s", envrc)
+    _root_log.info(
+        "Run `direnv allow %s` to activate the new stanza.", project_path
+    )
+
+
 def cmd_init_project(
     path: Path | None,
     days: int,
@@ -613,10 +706,52 @@ def cmd_init_project(
     no_git_ops: bool,
     install_systemd: bool,
     check_interval: str,
+    server_mode: bool,
+    dolt_user: str | None,
+    pass_path: str | None,
 ) -> None:
     beads_dir = find_beads_dir(path)
-    project_path = str(beads_dir.parent.resolve())
+    project_root = beads_dir.parent.resolve()
+    project_path = str(project_root)
     _root_log.info("Initialising Beads project at %s", project_path)
+
+    # -- Server mode pre-flight -----------------------------------------------
+    if server_mode:
+        if not shutil.which("dolt"):
+            sys.exit(
+                "bd-timew: --server requires the dolt binary on PATH. "
+                "Install it (e.g. via chezmoi apply) then re-run."
+            )
+        effective_user = dolt_user or project_root.name.lower()
+        result = run(
+            ["bd", "dolt", "set", "user", effective_user],
+            check=False, capture=True,
+        )
+        if result.returncode != 0:
+            _root_log.warning(
+                "bd dolt set user %s failed (may not be in server mode yet): %s",
+                effective_user, result.stderr.strip(),
+            )
+        else:
+            _root_log.info("Dolt user set to %s", effective_user)
+
+        if not shutil.which("pass"):
+            _root_log.warning(
+                "pass not found on PATH; skipping .envrc password wiring. "
+                "Add BEADS_DOLT_PASSWORD to .envrc manually."
+            )
+        else:
+            effective_pass_path = pass_path
+            if effective_pass_path is None:
+                default_suggestion = f"beads/{project_root.name.lower()}"
+                effective_pass_path = (
+                    input(
+                        f"pass store path for Dolt password [{default_suggestion}]: "
+                    ).strip()
+                    or default_suggestion
+                )
+            _provision_pass_entry(effective_pass_path)
+            _update_envrc(project_root, effective_pass_path)
 
     settings: list[tuple[str, str]] = [
         ("dolt.auto-commit", "batch"),
@@ -794,6 +929,9 @@ def main() -> None:
             no_git_ops=args.no_git_ops,
             install_systemd=args.install_systemd,
             check_interval=args.check_interval,
+            server_mode=args.server,
+            dolt_user=args.dolt_user,
+            pass_path=args.pass_path,
         )
     elif args.cmd == "run-service":
         cmd_run_service()
