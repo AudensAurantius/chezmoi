@@ -7,30 +7,14 @@ tuple via a per-project sidecar (.beads/bd-timew.yaml), then starts or stops
 a Timewarrior interval tagged accordingly.
 
 Also provides project maintenance commands: cleanup (daily Dolt commit,
-rolling history compaction, GC) and init-project (apply preferred Beads
-config and register a project for automated cleanup via a systemd user timer).
+rolling history compaction, GC), init-project (configure a Beads project
+and register it for automated cleanup), and server management commands.
 
 Resolution order for billing tuple (first match wins):
   1. Per-issue  case:<string>  label (escape hatch)
   2. First matching rule in  patterns:  (regex on space-joined label list)
   3.  default:  block in the sidecar
   4. Hardcoded global fallback (svc = "Technology Services")
-
-Subcommands:
-  start <id>         Claim issue + start Timewarrior interval
-  stop               Stop current Timewarrior interval
-  switch <id>        Stop current interval, start a new one
-  status             Show active interval bead, tuple, and elapsed time
-  resolve <id>       Dry-run: print resolved billing tuple only
-  cleanup            Commit, compact, and GC the active Beads project
-  init-project       Apply preferred Beads config; register for auto-cleanup
-  servers            List all registered repos and their Dolt server status
-  server-stop        Gracefully stop the Dolt server for one or all repos
-
-Examples:
-  bd-timew start J121-abc
-  bd-timew cleanup --days 7
-  bd-timew init-project --path /home/user/Source/MyProject --install-systemd
 """
 from __future__ import annotations
 
@@ -40,6 +24,7 @@ import getpass
 import json
 import logging
 import logging.handlers
+import os
 import re
 import shutil
 import subprocess
@@ -48,6 +33,7 @@ from pathlib import Path
 
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.prompt import Confirm, Prompt
 
 try:
     import yaml
@@ -57,17 +43,26 @@ except ModuleNotFoundError:
         "Install with `pip install --user pyyaml`."
     )
 
+try:
+    from rich_argparse import RawDescriptionRichHelpFormatter
+except ModuleNotFoundError:
+    sys.exit(
+        "bd-timew: rich-argparse not available. "
+        "Install with `pip install --user rich-argparse`."
+    )
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
 GLOBAL_SVC_DEFAULT = "Technology Services"
-SYSTEMD_SERVICE_NAME = "bd-timew-cleanup"
+SYSTEMD_CLEANUP_NAME = "bd-timew-cleanup"
+SYSTEMD_IDLE_STOP_NAME = "bd-timew-idle-stop"
 REPOS_CONFIG = Path.home() / ".config" / "bd-timew" / "repos.yaml"
 CLEANUP_STATE = Path.home() / ".cache" / "bd-timew" / "cleanup-state.json"
 CLEANUP_LOG = Path.home() / ".cache" / "bd-timew" / "cleanup.log"
+ACTIVITY_STATE = Path.home() / ".cache" / "bd-timew" / "activity-state.json"
 
-# Marker used to detect an existing server-mode stanza in .envrc (idempotency).
 _ENVRC_MARKER = "# bd-timew: beads dolt server"
 _ENVRC_STANZA = """\
 # bd-timew: beads dolt server — managed by bd-timew init-project
@@ -80,19 +75,15 @@ export BEADS_DOLT_PASSWORD="$(pass show {pass_path} | head -1)"
 # Logging
 # ---------------------------------------------------------------------------
 
-# Root logger: stderr via RichHandler (all subcommands).
 _root_log = logging.getLogger("bd-timew")
-
-# Cleanup sub-logger: propagates to root (-> stderr) and also writes to the
-# rotating log file when the file handler is attached in setup_logger().
 _cleanup_log = logging.getLogger("bd-timew.cleanup")
 
 
 class HelpFormatter(
-    argparse.RawDescriptionHelpFormatter,
     argparse.ArgumentDefaultsHelpFormatter,
+    RawDescriptionRichHelpFormatter,
 ):
-    """Preserve description/epilog whitespace and show argument defaults."""
+    """Preserve description/epilog whitespace, show defaults, and style with Rich."""
 
 
 def setup_logger(loglevel: str, *, enable_file_handler: bool = False) -> None:
@@ -112,9 +103,7 @@ def setup_logger(loglevel: str, *, enable_file_handler: bool = False) -> None:
             CLEANUP_LOG, maxBytes=1_000_000, backupCount=3
         )
         fh.setLevel(level)
-        fh.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-        )
+        fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
         _cleanup_log.addHandler(fh)
 
 
@@ -135,7 +124,10 @@ def get_cli_arguments() -> argparse.Namespace:
         help="Logging verbosity (DEBUG, INFO, WARNING, ERROR).",
     )
 
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub = parser.add_subparsers(
+        dest="cmd", required=True,
+        title="subcommands", metavar="<command>",
+    )
 
     # -- start ---------------------------------------------------------------
     p_start = sub.add_parser(
@@ -193,9 +185,9 @@ def get_cli_arguments() -> argparse.Namespace:
         help="Compact Dolt history and run GC; optionally commit first.",
         description=(
             "Runs Beads maintenance for the active project (or --project-dir):\n"
-            "  1. bd compact  — squash commits older than --days\n"
-            "  2. bd gc       — compact journal, reclaim disk space\n\n"
-            "Pass --commit to also seal pending batch writes before compacting.\n"
+            "  1. bd dolt commit  — seal pending batch writes (with --commit)\n"
+            "  2. bd compact      — squash commits older than --days\n"
+            "  3. bd gc           — compact journal, reclaim disk space\n\n"
             "The systemd service (installed by init-project --install-systemd) "
             "always passes --commit."
         ),
@@ -223,21 +215,23 @@ def get_cli_arguments() -> argparse.Namespace:
     # -- init-project --------------------------------------------------------
     p_init = sub.add_parser(
         "init-project",
-        help="Apply preferred Beads config and register for auto-cleanup.",
+        help="Configure a Beads project and register it for auto-cleanup.",
         description=(
-            "Configures a Beads project with recommended settings "
-            "(batch commits, no auto-push) and optionally registers it in\n"
-            f"{REPOS_CONFIG}\n"
-            "for the systemd cleanup timer.\n\n"
-            "Idempotent: safe to re-run; existing config values and registry "
-            "entries are not duplicated."
+            "Configures a Beads project with recommended settings\n"
+            "(batch commits, no auto-push, custom statuses, hooks) and\n"
+            f"registers it in {REPOS_CONFIG} for the systemd cleanup timer.\n\n"
+            "If the project is already registered, re-applies all settings\n"
+            "after confirmation (use --yes to skip). Safe to re-run.\n\n"
+            "All interactive prompts have corresponding CLI flags for\n"
+            "non-interactive / scripted use."
         ),
         formatter_class=HelpFormatter,
         epilog=(
             "Examples:\n"
             "  bd-timew init-project\n"
             "  bd-timew init-project --path ~/Source/Other --days 14 --no-git-ops\n"
-            "  bd-timew init-project --install-systemd\n"
+            "  bd-timew init-project --install-systemd --yes\n"
+            "  bd-timew init-project --statuses review,planning --no-server\n"
         ),
     )
     p_init.add_argument(
@@ -245,67 +239,99 @@ def get_cli_arguments() -> argparse.Namespace:
         help="Project root containing .beads/. Defaults to the active Beads workspace.",
     )
     p_init.add_argument(
-        "--days", type=int, default=7,
-        help="Rolling history window (days) stored in repos.yaml for this project.",
+        "--days", type=int, default=None,
+        help="Rolling history window (days). Prompted if not given.",
     )
     p_init.add_argument(
-        "--commit-cadence", type=str, default="1d",
-        help="How often to commit (e.g. 1d, 7d, 12h). Stored in repos.yaml.",
+        "--commit-cadence", type=str, default=None,
+        help="How often to commit (e.g. 1d, 7d, 12h). Prompted if not given.",
+    )
+    p_init.add_argument(
+        "--statuses", type=str, default=None,
+        help=(
+            "Comma-separated custom bd statuses to enable (e.g. 'review,planning'). "
+            "Merges with global defaults from repos.yaml. Prompted if not given."
+        ),
+    )
+    p_init.add_argument(
+        "--hooks", action=argparse.BooleanOptionalAction, default=None,
+        help=(
+            "Run  bd hooks install  to ensure git hook shims are present. "
+            "Prompted if not given."
+        ),
     )
     p_init.add_argument(
         "--no-git-ops", action="store_true",
         help=(
             "Set no-git-ops=true in Beads config (suppress git ops on the outer "
-            "repo). Recommended when .beads/ is a nested git repo."
+            "repo). Recommended when .beads/ shares the outer repo's .git dir."
         ),
     )
     p_init.add_argument(
         "--install-systemd", action="store_true",
         help=(
-            "Write ~/.config/systemd/user/bd-timew-cleanup.{service,timer} and "
-            "enable the timer. Unit files are only created if absent."
+            "Write and enable systemd user units for cleanup and idle-stop timers. "
+            "Unit files are only created if absent (idempotent)."
         ),
     )
     p_init.add_argument(
         "--check-interval", type=str, default="daily",
+        help="systemd OnCalendar value for the cleanup timer (used only on first creation).",
+    )
+    p_init.add_argument(
+        "--idle-stop-hours", type=int, default=None,
         help=(
-            "systemd OnCalendar value for the timer (only used when creating "
-            "the timer unit for the first time)."
+            "Stop the Dolt server after this many hours of inactivity. "
+            "0 disables idle-stop. Prompted if not given."
         ),
     )
     p_init.add_argument(
-        "--server", action=argparse.BooleanOptionalAction, default=True,
+        "--server", action=argparse.BooleanOptionalAction, default=None,
         help=(
-            "Configure the project for Dolt server mode: set a project-specific "
-            "Dolt user, provision a pass entry for the password, and write a "
-            "direnv stanza to .envrc that starts the server on directory entry. "
-            "Requires the dolt binary on PATH. Use --no-server to skip."
+            "Configure server mode: set Dolt user, provision pass entry, write "
+            "direnv stanza. Requires  dolt  on PATH. Prompted if not given."
         ),
     )
     p_init.add_argument(
         "--dolt-user", type=str, default=None,
-        help=(
-            "MySQL username for the Dolt server. "
-            "Defaults to the project directory name (lower-cased)."
-        ),
+        help="MySQL username for the Dolt server. Defaults to project dir name (lower-cased).",
     )
     p_init.add_argument(
         "--pass-path", type=str, default=None,
-        help=(
-            "pass store path for the Dolt password "
-            "(e.g. 'beads/j121'). Prompted interactively if not given."
+        help="pass store path for the Dolt password (e.g. 'beads/j121'). Prompted if not given.",
+    )
+    p_init.add_argument(
+        "--yes", "-y", action="store_true",
+        help="Accept all defaults without interactive prompts.",
+    )
+
+    # -- idle-stop -----------------------------------------------------------
+    p_idle = sub.add_parser(
+        "idle-stop",
+        help="Stop Dolt servers that have been idle longer than a threshold.",
+        description=(
+            "Checks the last-activity timestamp for each registered server-mode\n"
+            "repo and stops any server idle longer than --hours. Activity is\n"
+            "tracked via the Dolt server log mtime and bd-timew start/stop events.\n\n"
+            "Called automatically by the systemd idle-stop timer when installed\n"
+            "via  init-project --install-systemd."
         ),
+        formatter_class=HelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  bd-timew idle-stop --hours 4\n"
+            "  bd-timew idle-stop --hours 0   # dry run: print idle times only\n"
+        ),
+    )
+    p_idle.add_argument(
+        "--hours", type=float, default=4.0,
+        help="Stop servers idle longer than this many hours. 0 = report only, no stops.",
     )
 
     # -- run-service (internal; invoked by the systemd service unit) ---------
     sub.add_parser(
         "run-service",
-        help=argparse.SUPPRESS,
-        description=(
-            "Internal entrypoint called by the systemd service unit. Iterates "
-            f"{REPOS_CONFIG} and runs cleanup for each project that is due "
-            "based on its configured commit cadence."
-        ),
+        help="[internal] invoked by the systemd cleanup service unit",
         formatter_class=HelpFormatter,
     )
 
@@ -314,9 +340,9 @@ def get_cli_arguments() -> argparse.Namespace:
         "servers",
         help="List all registered repos and their Dolt server status.",
         description=(
-            f"Reads {REPOS_CONFIG} and runs `bd dolt status` in each registered "
-            "project directory. Reports whether the server is running, stopped, "
-            "or in embedded mode (server not applicable)."
+            f"Reads {REPOS_CONFIG} and runs  bd dolt status  in each registered\n"
+            "project directory. Reports running (with PID/port), stopped, or\n"
+            "embedded-mode (server not applicable) for each repo."
         ),
         formatter_class=HelpFormatter,
     )
@@ -326,7 +352,7 @@ def get_cli_arguments() -> argparse.Namespace:
         "server-stop",
         help="Gracefully stop the Dolt server for one or all registered repos.",
         description=(
-            "Runs `bd dolt stop` in the specified project directory. "
+            "Runs  bd dolt stop  in the target project directory. "
             "If --path is omitted, stops servers for all registered repos."
         ),
         formatter_class=HelpFormatter,
@@ -349,9 +375,13 @@ def get_cli_arguments() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 
 def run(
-    cmd: list[str], *, check: bool = True, capture: bool = False
+    cmd: list[str], *, check: bool = True, capture: bool = False,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, check=check, text=True, capture_output=capture)
+    return subprocess.run(
+        cmd, check=check, text=True, capture_output=capture,
+        cwd=cwd,
+    )
 
 
 def find_beads_dir(project_dir: Path | None = None) -> Path:
@@ -423,6 +453,30 @@ def resolve_tuple(labels: list[str], sidecar: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Activity tracking (for idle-stop)
+# ---------------------------------------------------------------------------
+
+def _load_activity_state() -> dict:
+    if not ACTIVITY_STATE.exists():
+        return {}
+    with ACTIVITY_STATE.open() as f:
+        return json.load(f)
+
+
+def _save_activity_state(state: dict) -> None:
+    ACTIVITY_STATE.parent.mkdir(parents=True, exist_ok=True)
+    with ACTIVITY_STATE.open("w") as f:
+        json.dump(state, f, indent=2, default=str)
+
+
+def _record_activity(project_path: str) -> None:
+    """Record the current time as the last-activity timestamp for a project."""
+    state = _load_activity_state()
+    state[project_path] = dt.datetime.now(dt.timezone.utc).isoformat()
+    _save_activity_state(state)
+
+
+# ---------------------------------------------------------------------------
 # Subcommand implementations
 # ---------------------------------------------------------------------------
 
@@ -457,8 +511,16 @@ def cmd_start(issue_id: str, *, dry_run: bool = False) -> None:
     if issue.get("status") != "in_progress":
         run(["bd", "update", issue_id, "--claim"], check=False)
 
+    _record_activity(str(beads_dir.parent.resolve()))
+
 
 def cmd_stop() -> None:
+    # Record activity before stopping so the timestamp reflects last use.
+    result = run(["bd", "where"], check=False, capture=True)
+    if result.returncode == 0:
+        project_path = result.stdout.strip().split("\n", 1)[0].strip()
+        beads_dir = Path(project_path)
+        _record_activity(str(beads_dir.parent.resolve()))
     run(["timew", "stop"], check=False)
 
 
@@ -544,22 +606,20 @@ def cmd_cleanup(
     project_dir: Path | None = None,
 ) -> None:
     beads_dir = find_beads_dir(project_dir)
+    project_root = beads_dir.parent.resolve()
     log = logging.LoggerAdapter(
         _cleanup_log,
-        extra={"project": str(beads_dir.parent)},
+        extra={"project": str(project_root)},
     )
-    bd = ["bd", "--db", str(beads_dir / "embeddeddolt" / beads_dir.parent.name)]
-
     log.info("Starting cleanup (days=%d, commit=%s)", days, commit)
 
     if commit:
         log.info("Phase 1/3: dolt commit")
-        result = run([*bd, "dolt", "commit"], check=False, capture=True)
+        result = run(
+            ["bd", "dolt", "commit"], check=False, capture=True, cwd=project_root
+        )
         if result.returncode != 0:
-            log.warning(
-                "dolt commit: %s",
-                result.stderr.strip() or result.stdout.strip(),
-            )
+            log.warning("dolt commit: %s", result.stderr.strip() or result.stdout.strip())
         else:
             log.info("dolt commit: %s", result.stdout.strip())
     else:
@@ -567,7 +627,8 @@ def cmd_cleanup(
 
     log.info("Phase 2/3: compact --days %d", days)
     result = run(
-        [*bd, "compact", f"--days={days}", "--force"], check=False, capture=True
+        ["bd", "compact", f"--days={days}", "--force"],
+        check=False, capture=True, cwd=project_root,
     )
     if result.returncode != 0:
         log.error("compact failed: %s", result.stderr.strip())
@@ -576,7 +637,8 @@ def cmd_cleanup(
 
     log.info("Phase 3/3: gc")
     result = run(
-        [*bd, "gc", "--skip-decay", "--force"], check=False, capture=True
+        ["bd", "gc", "--skip-decay", "--force"],
+        check=False, capture=True, cwd=project_root,
     )
     if result.returncode != 0:
         log.error("gc failed: %s", result.stderr.strip())
@@ -592,10 +654,13 @@ def cmd_cleanup(
 
 def _load_repos_config() -> dict:
     if not REPOS_CONFIG.exists():
-        return {"global": {}, "repos": []}
+        return {"global": {"defaults": {"statuses": [], "hooks": []}}, "repos": []}
     with REPOS_CONFIG.open() as f:
         data = yaml.safe_load(f) or {}
     data.setdefault("global", {})
+    data["global"].setdefault("defaults", {})
+    data["global"]["defaults"].setdefault("statuses", [])
+    data["global"]["defaults"].setdefault("hooks", [])
     data.setdefault("repos", [])
     return data
 
@@ -604,6 +669,13 @@ def _save_repos_config(data: dict) -> None:
     REPOS_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     with REPOS_CONFIG.open("w") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+
+
+def _get_repo_entry(config: dict, project_path: str) -> dict | None:
+    for repo in config["repos"]:
+        if repo.get("path") == project_path:
+            return repo
+    return None
 
 
 def _load_cleanup_state() -> dict:
@@ -620,25 +692,35 @@ def _save_cleanup_state(state: dict) -> None:
 
 
 def _parse_cadence(cadence_str: str) -> dt.timedelta:
-    """Parse a cadence string like '1d', '7d', '12h' into a timedelta."""
     m = re.fullmatch(r"(\d+)([dhm])", cadence_str.strip())
     if not m:
-        sys.exit(
-            f"bd-timew: invalid cadence '{cadence_str}' — use e.g. 1d, 7d, 12h"
-        )
+        sys.exit(f"bd-timew: invalid cadence '{cadence_str}' — use e.g. 1d, 7d, 12h")
     value, unit = int(m.group(1)), m.group(2)
-    return {
-        "d": dt.timedelta(days=value),
-        "h": dt.timedelta(hours=value),
-        "m": dt.timedelta(minutes=value),
-    }[unit]
+    return {"d": dt.timedelta(days=value), "h": dt.timedelta(hours=value),
+            "m": dt.timedelta(minutes=value)}[unit]
+
+
+def _is_interactive() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _prompt(message: str, default: str, *, yes: bool) -> str:
+    if yes or not _is_interactive():
+        return default
+    return Prompt.ask(message, default=default)
+
+
+def _confirm(message: str, default: bool, *, yes: bool) -> bool:
+    if yes or not _is_interactive():
+        return default
+    return Confirm.ask(message, default=default)
 
 
 # ---------------------------------------------------------------------------
-# init-project
+# systemd unit templates
 # ---------------------------------------------------------------------------
 
-_SERVICE_TEMPLATE = """\
+_CLEANUP_SERVICE_TEMPLATE = """\
 [Unit]
 Description=bd-timew Beads cleanup (commit, compact, GC) for all registered projects
 After=network.target
@@ -653,12 +735,39 @@ StandardError=journal
 WantedBy=default.target
 """
 
-_TIMER_TEMPLATE = """\
+_CLEANUP_TIMER_TEMPLATE = """\
 [Unit]
 Description=Run bd-timew Beads cleanup on a regular schedule
 
 [Timer]
 OnCalendar={check_interval}
+Persistent=true
+Unit={service_name}.service
+
+[Install]
+WantedBy=timers.target
+"""
+
+_IDLE_STOP_SERVICE_TEMPLATE = """\
+[Unit]
+Description=bd-timew idle server stop — stop Dolt servers idle longer than threshold
+
+[Service]
+Type=oneshot
+ExecStart={bd_timew_path} idle-stop --hours {idle_stop_hours}
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+"""
+
+_IDLE_STOP_TIMER_TEMPLATE = """\
+[Unit]
+Description=Run bd-timew idle server stop check hourly
+
+[Timer]
+OnCalendar=hourly
 Persistent=true
 Unit={service_name}.service
 
@@ -681,28 +790,16 @@ def _pass_entry_exists(pass_path: str) -> bool:
     return run(["pass", "show", pass_path], check=False, capture=True).returncode == 0
 
 
-def _provision_pass_entry(pass_path: str) -> None:
-    """Ensure a pass entry exists at pass_path; create one if not."""
+def _provision_pass_entry(pass_path: str, *, yes: bool = False) -> None:
     if _pass_entry_exists(pass_path):
         _root_log.info("pass entry already exists at %s", pass_path)
         return
 
     _root_log.info("No pass entry found at %s", pass_path)
-    choice = input("Generate a random password with `pass generate`? [Y/n]: ").strip().lower()
-
-    if choice in ("", "y", "yes"):
-        # pass generate writes to the store and prints the password to the
-        # terminal. --no-symbols avoids special chars that might need quoting
-        # in shell contexts, though Dolt handles any password fine over the
-        # MySQL wire protocol.
+    if _confirm("Generate a random password with `pass generate`?", default=True, yes=yes):
         run(["pass", "generate", "--no-symbols", pass_path, "32"])
         _root_log.info("Generated password stored at %s", pass_path)
     else:
-        # getpass reads from /dev/tty directly (independent of stdin
-        # redirection), then we hand the value to `pass insert --multiline`
-        # via subprocess stdin. --multiline is the only pass insert variant
-        # that reads stdin; --echo and the default both open /dev/tty and
-        # cannot be piped.
         password = getpass.getpass(f"Enter password for {pass_path}: ")
         subprocess.run(
             ["pass", "insert", "--multiline", "--force", pass_path],
@@ -714,7 +811,6 @@ def _provision_pass_entry(pass_path: str) -> None:
 
 
 def _update_envrc(project_path: Path, pass_path: str) -> None:
-    """Append the Dolt server stanza to .envrc; idempotent."""
     envrc = project_path / ".envrc"
     stanza = _ENVRC_STANZA.format(pass_path=pass_path)
 
@@ -728,164 +824,270 @@ def _update_envrc(project_path: Path, pass_path: str) -> None:
         envrc.write_text(stanza)
 
     _root_log.info("Updated %s", envrc)
-    _root_log.info(
-        "Run `direnv allow %s` to activate the new stanza.", project_path
-    )
+    _root_log.info("Run `direnv allow %s` to activate the new stanza.", project_path)
 
+
+# ---------------------------------------------------------------------------
+# init-project
+# ---------------------------------------------------------------------------
 
 def cmd_init_project(
     path: Path | None,
-    days: int,
-    commit_cadence: str,
+    days: int | None,
+    commit_cadence: str | None,
+    statuses_arg: str | None,
+    hooks_arg: bool | None,
     no_git_ops: bool,
     install_systemd: bool,
     check_interval: str,
-    server_mode: bool,
+    idle_stop_hours: int | None,
+    server_mode: bool | None,
     dolt_user: str | None,
     pass_path: str | None,
+    yes: bool,
 ) -> None:
     beads_dir = find_beads_dir(path)
     project_root = beads_dir.parent.resolve()
     project_path = str(project_root)
-    _root_log.info("Initialising Beads project at %s", project_path)
 
-    # -- Server mode pre-flight -----------------------------------------------
-    if server_mode:
-        if not shutil.which("dolt"):
-            sys.exit(
-                "bd-timew: --server requires the dolt binary on PATH. "
-                "Install it (e.g. via chezmoi apply) then re-run."
-            )
-        effective_user = dolt_user or project_root.name.lower()
-        result = run(
-            ["bd", "dolt", "set", "user", effective_user],
-            check=False, capture=True,
+    # -- Re-init detection ----------------------------------------------------
+    config = _load_repos_config()
+    existing_entry = _get_repo_entry(config, project_path)
+    if existing_entry is not None:
+        _root_log.info("Project already registered: %s", project_path)
+        if not _confirm(
+            "Re-apply all init-project settings to this project?",
+            default=True, yes=yes,
+        ):
+            _root_log.info("Aborted.")
+            return
+    else:
+        _root_log.info("Initialising Beads project at %s", project_path)
+
+    # -- Resolve interactive parameters ---------------------------------------
+    global_defaults = config["global"]["defaults"]
+
+    effective_days = days
+    if effective_days is None:
+        effective_days = int(_prompt("Compact history window (days)", "7", yes=yes))
+
+    effective_cadence = commit_cadence
+    if effective_cadence is None:
+        effective_cadence = _prompt("Commit cadence (e.g. 1d, 12h)", "1d", yes=yes)
+
+    # Statuses: merge global defaults + flag + prompt
+    default_statuses_str = ",".join(global_defaults["statuses"]) or ""
+    if statuses_arg is not None:
+        raw_statuses = statuses_arg
+    else:
+        raw_statuses = _prompt(
+            "Custom statuses to enable (comma-separated, blank for none)",
+            default_statuses_str, yes=yes,
         )
-        if result.returncode != 0:
-            _root_log.warning(
-                "bd dolt set user %s failed (may not be in server mode yet): %s",
-                effective_user, result.stderr.strip(),
-            )
-        else:
-            _root_log.info("Dolt user set to %s", effective_user)
+    effective_statuses = [s.strip() for s in raw_statuses.split(",") if s.strip()]
 
-        if not shutil.which("pass"):
-            _root_log.warning(
-                "pass not found on PATH; skipping .envrc password wiring. "
-                "Add BEADS_DOLT_PASSWORD to .envrc manually."
-            )
-        else:
-            effective_pass_path = pass_path
-            if effective_pass_path is None:
-                default_suggestion = f"beads/{project_root.name.lower()}"
-                effective_pass_path = (
-                    input(
-                        f"pass store path for Dolt password [{default_suggestion}]: "
-                    ).strip()
-                    or default_suggestion
-                )
-            _provision_pass_entry(effective_pass_path)
-            _update_envrc(project_root, effective_pass_path)
+    # Hooks: whether to run bd hooks install
+    effective_hooks: bool
+    if hooks_arg is not None:
+        effective_hooks = hooks_arg
+    else:
+        effective_hooks = _confirm("Run  bd hooks install  to install git hook shims?",
+                                   default=True, yes=yes)
 
+    # Server mode
+    dolt_available = bool(shutil.which("dolt"))
+    effective_server: bool
+    if server_mode is not None:
+        effective_server = server_mode
+    elif not dolt_available:
+        effective_server = False
+        _root_log.info("dolt binary not found — skipping server mode wiring")
+    else:
+        effective_server = _confirm(
+            "Configure Dolt server mode (.envrc + pass credential)?",
+            default=True, yes=yes,
+        )
+
+    # Idle-stop hours
+    effective_idle_hours: int
+    if idle_stop_hours is not None:
+        effective_idle_hours = idle_stop_hours
+    else:
+        effective_idle_hours = int(
+            _prompt("Idle server stop threshold (hours, 0 to disable)", "4", yes=yes)
+        )
+
+    # -- Apply bd config settings ---------------------------------------------
     settings: list[tuple[str, str]] = [
         ("dolt.auto-commit", "batch"),
         ("no-push", "true"),
     ]
     if no_git_ops:
         settings.append(("no-git-ops", "true"))
+    for status in effective_statuses:
+        settings.append(("status.custom", status))
 
     for key, value in settings:
         result = run(
-            ["bd", "config", "set", key, value], check=False, capture=True
+            ["bd", "config", "set", key, value],
+            check=False, capture=True, cwd=project_root,
         )
         if result.returncode != 0:
-            _root_log.warning(
-                "config set %s=%s failed: %s", key, value, result.stderr.strip()
-            )
+            _root_log.warning("config set %s=%s failed: %s", key, value, result.stderr.strip())
         else:
             _root_log.info("config set %s=%s", key, value)
 
-    # Register in repos.yaml (idempotent)
-    config = _load_repos_config()
-    existing_paths = [r.get("path") for r in config["repos"]]
-    if project_path not in existing_paths:
-        config["repos"].append({
-            "path": project_path,
-            "commit_cadence": commit_cadence,
-            "compact_days": days,
-        })
-        _save_repos_config(config)
-        _root_log.info("Registered in %s", REPOS_CONFIG)
-    else:
-        _root_log.info("Already registered in %s (not duplicated)", REPOS_CONFIG)
+    # -- Install git hook shims -----------------------------------------------
+    if effective_hooks:
+        result = run(["bd", "hooks", "install"], check=False, capture=True, cwd=project_root)
+        if result.returncode != 0:
+            _root_log.warning("bd hooks install failed: %s", result.stderr.strip())
+        else:
+            _root_log.info("bd hooks install: ok")
 
-    # Warn if the timer check interval is coarser than this repo's commit cadence
+    # -- Server mode wiring ---------------------------------------------------
+    effective_pass_path: str | None = pass_path
+    if effective_server:
+        if not dolt_available:
+            _root_log.warning(
+                "--server requested but dolt binary not found; skipping server wiring"
+            )
+            effective_server = False
+        else:
+            effective_user = dolt_user or project_root.name.lower()
+            result = run(
+                ["bd", "dolt", "set", "user", effective_user],
+                check=False, capture=True, cwd=project_root,
+            )
+            if result.returncode != 0:
+                _root_log.warning(
+                    "bd dolt set user %s failed: %s",
+                    effective_user, result.stderr.strip(),
+                )
+            else:
+                _root_log.info("Dolt user set to %s", effective_user)
+
+            if not shutil.which("pass"):
+                _root_log.warning(
+                    "pass not found on PATH; skipping .envrc password wiring. "
+                    "Add BEADS_DOLT_PASSWORD to .envrc manually."
+                )
+            else:
+                if effective_pass_path is None:
+                    default_suggestion = f"beads/{project_root.name.lower()}"
+                    effective_pass_path = _prompt(
+                        "pass store path for Dolt password",
+                        default_suggestion, yes=yes,
+                    )
+                _provision_pass_entry(effective_pass_path, yes=yes)
+                _update_envrc(project_root, effective_pass_path)
+
+    # -- Update repos.yaml entry ----------------------------------------------
+    repo_entry: dict = existing_entry if existing_entry is not None else {}
+    repo_entry["path"] = project_path
+    repo_entry["commit_cadence"] = effective_cadence
+    repo_entry["compact_days"] = effective_days
+    repo_entry["statuses"] = effective_statuses
+    if effective_server and effective_pass_path:
+        repo_entry["server"] = {
+            "enabled": True,
+            "pass_path": effective_pass_path,
+            "dolt_user": dolt_user or project_root.name.lower(),
+        }
+    elif not effective_server:
+        repo_entry.pop("server", None)
+
+    if existing_entry is None:
+        config["repos"].append(repo_entry)
+    config["global"]["idle_stop_hours"] = effective_idle_hours
+    _save_repos_config(config)
+    _root_log.info(
+        "%s in %s",
+        "Updated" if existing_entry else "Registered",
+        REPOS_CONFIG,
+    )
+
+    # -- Cadence coherence check ----------------------------------------------
     global_interval = config["global"].get("check_interval", check_interval)
     try:
-        interval_td = _parse_cadence(
-            _INTERVAL_ALIASES.get(global_interval, global_interval)
-        )
-        repo_cadence_td = _parse_cadence(commit_cadence)
+        interval_td = _parse_cadence(_INTERVAL_ALIASES.get(global_interval, global_interval))
+        repo_cadence_td = _parse_cadence(effective_cadence)
         if interval_td > repo_cadence_td:
             _root_log.warning(
                 "check_interval '%s' is coarser than commit_cadence '%s' — "
                 "commits for this project may be delayed",
-                global_interval, commit_cadence,
+                global_interval, effective_cadence,
             )
     except SystemExit:
-        pass  # non-parseable interval string (e.g. custom OnCalendar); skip
+        pass
 
     if not install_systemd:
         return
 
-    # Write systemd unit files (idempotent — only if absent)
+    # -- systemd units --------------------------------------------------------
     systemd_dir = Path.home() / ".config" / "systemd" / "user"
     systemd_dir.mkdir(parents=True, exist_ok=True)
-    service_path = systemd_dir / f"{SYSTEMD_SERVICE_NAME}.service"
-    timer_path = systemd_dir / f"{SYSTEMD_SERVICE_NAME}.timer"
     bd_timew_path = shutil.which("bd-timew") or sys.argv[0]
 
-    if not service_path.exists():
-        service_path.write_text(
-            _SERVICE_TEMPLATE.format(bd_timew_path=bd_timew_path)
-        )
-        _root_log.info("Wrote %s", service_path)
-    else:
-        _root_log.info("Service unit already exists, skipping: %s", service_path)
+    def _write_unit(path: Path, content: str, label: str) -> None:
+        if not path.exists():
+            path.write_text(content)
+            _root_log.info("Wrote %s", path)
+        else:
+            _root_log.info("%s already exists, skipping: %s", label, path)
 
-    if not timer_path.exists():
+    cleanup_service = systemd_dir / f"{SYSTEMD_CLEANUP_NAME}.service"
+    cleanup_timer = systemd_dir / f"{SYSTEMD_CLEANUP_NAME}.timer"
+    _write_unit(cleanup_service, _CLEANUP_SERVICE_TEMPLATE.format(bd_timew_path=bd_timew_path), "Cleanup service")
+    if not cleanup_timer.exists():
         config["global"]["check_interval"] = check_interval
         _save_repos_config(config)
-        timer_path.write_text(
-            _TIMER_TEMPLATE.format(
-                check_interval=check_interval,
-                service_name=SYSTEMD_SERVICE_NAME,
-            )
-        )
-        _root_log.info("Wrote %s", timer_path)
+        cleanup_timer.write_text(_CLEANUP_TIMER_TEMPLATE.format(
+            check_interval=check_interval, service_name=SYSTEMD_CLEANUP_NAME,
+        ))
+        _root_log.info("Wrote %s", cleanup_timer)
     else:
-        _root_log.info("Timer unit already exists, skipping: %s", timer_path)
+        _root_log.info("Cleanup timer already exists, skipping: %s", cleanup_timer)
 
-    result = run(
-        ["systemctl", "--user", "daemon-reload"], check=False, capture=True
-    )
+    if effective_idle_hours > 0:
+        idle_service = systemd_dir / f"{SYSTEMD_IDLE_STOP_NAME}.service"
+        idle_timer = systemd_dir / f"{SYSTEMD_IDLE_STOP_NAME}.timer"
+        _write_unit(
+            idle_service,
+            _IDLE_STOP_SERVICE_TEMPLATE.format(
+                bd_timew_path=bd_timew_path,
+                idle_stop_hours=effective_idle_hours,
+            ),
+            "Idle-stop service",
+        )
+        _write_unit(
+            idle_timer,
+            _IDLE_STOP_TIMER_TEMPLATE.format(service_name=SYSTEMD_IDLE_STOP_NAME),
+            "Idle-stop timer",
+        )
+
+    result = run(["systemctl", "--user", "daemon-reload"], check=False, capture=True)
     if result.returncode != 0:
         _root_log.error("daemon-reload failed: %s", result.stderr.strip())
         return
 
+    units_to_enable = [f"{SYSTEMD_CLEANUP_NAME}.timer"]
+    if effective_idle_hours > 0:
+        units_to_enable.append(f"{SYSTEMD_IDLE_STOP_NAME}.timer")
+
     result = run(
-        ["systemctl", "--user", "enable", "--now",
-         f"{SYSTEMD_SERVICE_NAME}.timer"],
+        ["systemctl", "--user", "enable", "--now", *units_to_enable],
         check=False, capture=True,
     )
     if result.returncode != 0:
         _root_log.error("enable --now failed: %s", result.stderr.strip())
     else:
-        _root_log.info("Timer enabled and started: %s.timer", SYSTEMD_SERVICE_NAME)
+        for u in units_to_enable:
+            _root_log.info("Timer enabled and started: %s", u)
 
 
 # ---------------------------------------------------------------------------
-# run-service (systemd entrypoint)
+# run-service (systemd cleanup entrypoint)
 # ---------------------------------------------------------------------------
 
 def cmd_run_service() -> None:
@@ -926,6 +1128,94 @@ def cmd_run_service() -> None:
             _save_cleanup_state(state)
         except Exception:
             _cleanup_log.exception("cleanup failed for %s", path)
+
+
+# ---------------------------------------------------------------------------
+# idle-stop
+# ---------------------------------------------------------------------------
+
+def _server_log_mtime(project_dir: Path) -> dt.datetime | None:
+    """Return the mtime of the dolt server log as a UTC datetime, or None."""
+    log_path = project_dir / ".beads" / "dolt-server.log"
+    if not log_path.exists():
+        return None
+    mtime = log_path.stat().st_mtime
+    return dt.datetime.fromtimestamp(mtime, tz=dt.timezone.utc)
+
+
+def _last_activity(project_path: str, project_dir: Path) -> dt.datetime | None:
+    """Return the most recent activity timestamp from all available signals."""
+    candidates: list[dt.datetime] = []
+
+    # Signal 1: bd-timew start/stop events
+    state = _load_activity_state()
+    ts_str = state.get(project_path)
+    if ts_str:
+        try:
+            candidates.append(
+                dt.datetime.fromisoformat(ts_str).replace(tzinfo=dt.timezone.utc)
+            )
+        except ValueError:
+            pass
+
+    # Signal 2: dolt server log mtime (every connection updates it)
+    log_mtime = _server_log_mtime(project_dir)
+    if log_mtime:
+        candidates.append(log_mtime)
+
+    return max(candidates) if candidates else None
+
+
+def cmd_idle_stop(hours: float) -> None:
+    config = _load_repos_config()
+    now = dt.datetime.now(dt.timezone.utc)
+    threshold = dt.timedelta(hours=hours)
+
+    for repo in config.get("repos", []):
+        path = repo.get("path")
+        if not path:
+            continue
+        project_dir = Path(path)
+        if not project_dir.is_dir():
+            continue
+
+        # Only act on server-mode repos
+        server_cfg = repo.get("server", {})
+        if not server_cfg.get("enabled", False):
+            continue
+
+        last = _last_activity(path, project_dir)
+        if last is None:
+            _root_log.info("%s  [no activity recorded — skipping]", path)
+            continue
+
+        idle_for = now - last
+        idle_hours_str = f"{idle_for.total_seconds() / 3600:.1f}h"
+
+        if hours == 0:
+            _root_log.info("%s  [idle %s]", path, idle_hours_str)
+            continue
+
+        if idle_for >= threshold:
+            _root_log.info("%s  [idle %s — stopping server]", path, idle_hours_str)
+            result = subprocess.run(
+                ["bd", "dolt", "stop"],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+            )
+            combined = (result.stdout + result.stderr).lower()
+            if result.returncode == 0:
+                _root_log.info("%s  server stopped", path)
+            elif "not running" in combined:
+                _root_log.info("%s  server was already stopped", path)
+            else:
+                _root_log.error(
+                    "%s  stop failed: %s",
+                    path, result.stderr.strip() or result.stdout.strip(),
+                )
+        else:
+            _root_log.info("%s  [idle %s — within threshold]", path, idle_hours_str)
 
 
 # ---------------------------------------------------------------------------
@@ -995,10 +1285,7 @@ def cmd_server_stop(path: Path | None) -> None:
         combined = (result.stdout + result.stderr).lower()
 
         if result.returncode == 0:
-            _root_log.info(
-                "%s  stopped (%s)",
-                proj_path, result.stdout.strip() or "ok",
-            )
+            _root_log.info("%s  stopped (%s)", proj_path, result.stdout.strip() or "ok")
         elif "not supported in embedded mode" in combined:
             _root_log.info("%s  [embedded mode — nothing to stop]", proj_path)
         elif "not running" in combined or "no server" in combined:
@@ -1018,7 +1305,7 @@ def main() -> None:
     args = get_cli_arguments()
     setup_logger(
         args.loglevel,
-        enable_file_handler=args.cmd in ("cleanup", "run-service"),
+        enable_file_handler=args.cmd in ("cleanup", "run-service", "idle-stop"),
     )
 
     if args.cmd == "start":
@@ -1032,23 +1319,25 @@ def main() -> None:
     elif args.cmd == "resolve":
         cmd_start(args.issue_id, dry_run=True)
     elif args.cmd == "cleanup":
-        cmd_cleanup(
-            args.days,
-            commit=args.commit,
-            project_dir=args.project_dir,
-        )
+        cmd_cleanup(args.days, commit=args.commit, project_dir=args.project_dir)
     elif args.cmd == "init-project":
         cmd_init_project(
             path=args.path,
             days=args.days,
             commit_cadence=args.commit_cadence,
+            statuses_arg=args.statuses,
+            hooks_arg=args.hooks,
             no_git_ops=args.no_git_ops,
             install_systemd=args.install_systemd,
             check_interval=args.check_interval,
+            idle_stop_hours=args.idle_stop_hours,
             server_mode=args.server,
             dolt_user=args.dolt_user,
             pass_path=args.pass_path,
+            yes=args.yes,
         )
+    elif args.cmd == "idle-stop":
+        cmd_idle_stop(args.hours)
     elif args.cmd == "run-service":
         cmd_run_service()
     elif args.cmd == "servers":
