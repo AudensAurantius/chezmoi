@@ -1,0 +1,17 @@
+# Pinned dolt release, consumed by run_onchange_install-dolt.sh.tmpl.
+#
+# dolt (https://github.com/dolthub/dolt) ships per-platform tarballs.
+# Only linux_amd64 is pinned; this machine is WSL2/amd64. Add more
+# platforms if a macOS or arm64 consumer appears.
+#
+# To bump:
+#   1. version: new upstream tag, "v"-prefixed
+#   2. checksums.linux_amd64: SHA256 of dolt-linux-amd64.tar.gz from that release
+#      curl -fsSL https://github.com/dolthub/dolt/releases/download/<tag>/dolt-linux-amd64.tar.gz \
+#        | sha256sum
+#   3. commit — rendered script hash changes, installer re-runs on next apply.
+
+dolt:
+  version: "v1.86.5"
+  checksums:
+    linux_amd64: "75f4348c164bfb80d3736965a9b17aead150763de61e4a8fd9f7540ada9d80fc"

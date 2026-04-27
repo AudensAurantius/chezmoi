@@ -1,0 +1,64 @@
+#!/bin/sh
+# run_onchange_install-dolt.sh.tmpl — install dolt to ~/.local/bin.
+#
+# dolt (https://github.com/dolthub/dolt) is the Dolt SQL binary required
+# for beads server mode. The tarball SHA256 is pinned in
+# .chezmoidata/dolt.yaml; bumping that file re-triggers this installer.
+#
+# Only linux_amd64 is supported here. The script exits 0 (skipping) on
+# other platforms rather than failing `chezmoi apply`.
+{{- $v := .dolt.version -}}
+{{- $platform := printf "%s_%s" .chezmoi.os .chezmoi.arch -}}
+{{- $sha := dig $platform "" .dolt.checksums -}}
+{{- $assetName := printf "dolt-%s-%s.tar.gz" .chezmoi.os .chezmoi.arch -}}
+{{- $assetURL := printf "https://github.com/dolthub/dolt/releases/download/%s/%s" $v $assetName }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+ASSET_NAME={{ $assetName | quote }}
+ASSET_URL={{ $assetURL | quote }}
+EXPECTED_SHA={{ $sha | quote }}
+INSTALL_PATH={{ joinPath .chezmoi.homeDir ".local" "bin" "dolt" | quote }}
+BINARY_IN_TAR={{ printf "dolt-%s-%s/bin/dolt" .chezmoi.os .chezmoi.arch | quote }}
+
+if [ -z "$EXPECTED_SHA" ]; then
+  echo "dolt installer: no pinned checksum for $ASSET_NAME; skipping" >&2
+  exit 0
+fi
+
+# Idempotency guard: skip if the installed version already matches.
+# `dolt version` prints "dolt version X.Y.Z".
+_ver_nodot="${VERSION#v}"
+if [ -x "$INSTALL_PATH" ] && "$INSTALL_PATH" version 2>/dev/null | grep -qF "$_ver_nodot"; then
+  echo "dolt installer: $VERSION already installed at $INSTALL_PATH" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$INSTALL_PATH")"
+
+tmp_tar=$(mktemp)
+tmp_dir=$(mktemp -d)
+trap 'rm -rf "$tmp_tar" "$tmp_dir"' EXIT
+
+echo "dolt installer: downloading $ASSET_URL" >&2
+curl -fsSL -o "$tmp_tar" "$ASSET_URL"
+
+actual=$(sha256sum "$tmp_tar" | awk '{print $1}')
+if [ "$EXPECTED_SHA" != "$actual" ]; then
+  echo "dolt installer: checksum mismatch for $ASSET_NAME" >&2
+  echo "  expected: $EXPECTED_SHA" >&2
+  echo "  actual:   $actual" >&2
+  exit 1
+fi
+
+tar -xzf "$tmp_tar" -C "$tmp_dir"
+binary="$tmp_dir/$BINARY_IN_TAR"
+if [ ! -f "$binary" ]; then
+  echo "dolt installer: no binary at $BINARY_IN_TAR in $ASSET_NAME" >&2
+  exit 1
+fi
+
+chmod u+x "$binary"
+mv "$binary" "$INSTALL_PATH"
+echo "dolt installer: $VERSION installed to $INSTALL_PATH" >&2
