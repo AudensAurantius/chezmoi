@@ -56,6 +56,7 @@ Before saying "done", "fixed", "passing", "working", or any equivalent — in th
 - **Jira comments**: lead with context/methodology, integrate links, connect to team knowledge; avoid prescriptive "next steps" in analysis comments. See `feedback-jira-comment-style.md`.
 - **Jira drafts**: track posting status (`posted`, `comment_id`, `target_status`) in YAML frontmatter; always use `contentFormat: "adf"`. See `feedback-jira-draft-frontmatter.md`.
 - **Chezmoi edits**: respect templating layers and known pitfalls when modifying dotfiles. See `feedback-chezmoi-patterns.md`.
+- **Chezmoi worktree testing**: `chezmoi apply` always reads from the canonical source (`~/.local/share/chezmoi/`), not the active feature worktree. To test from a worktree: `chezmoi apply --source ~/Source/chezmoi-features --force <target>`.
 
 ## Review Checkpoints
 
