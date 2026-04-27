@@ -1,0 +1,21 @@
+[Unit]
+Description=Rotate auto-session hook logs
+Documentation=file://%h/.claude/skills/auto-session/logrotate.d/claude-auto-session.conf
+ConditionFileIsExecutable=/usr/sbin/logrotate
+
+[Service]
+Type=oneshot
+# User-level logrotate needs an explicit state file (the root default lives
+# at /var/lib/logrotate/logrotate.status and is not writable as a regular user).
+ExecStart=/usr/sbin/logrotate --state %h/.cache/claude-auto-session-logrotate.state %h/.config/logrotate.d/claude-auto-session.conf
+
+# Best-effort only: a failed rotation must not brick the user's session workflow.
+# (An oversized log is annoying, not catastrophic.)
+SuccessExitStatus=0 1
+
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+[Install]
+WantedBy=default.target

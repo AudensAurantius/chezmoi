@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# auto-session launch script — {{session_slug}}
+#
+# Scaffold-generated. Do not edit in-place — changes to the template shape
+# should go into ~/.claude/skills/auto-session/templates/run.sh.tmpl and a
+# fresh `/auto-session` invocation will regenerate this file for a new session.
+#
+# Refuses to run unless invoked from the session dir. This guards against a
+# lazy `./run.sh` from the wrong cwd, which would cause Claude Code to resolve
+# CLAUDE.md, .claude/settings.local.json, and bead paths against the wrong
+# project root — a silent-misbehavior class of failure.
+
+set -euo pipefail
+
+# ─── Session-dir invariant ────────────────────────────────────────────────────
+SESSION_DIR_EXPECTED="{{session_dir}}"
+SESSION_DIR_ACTUAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
+if [ "$SESSION_DIR_ACTUAL" != "$SESSION_DIR_EXPECTED" ]; then
+  printf 'run.sh: refusing to launch — session dir moved.\n' >&2
+  printf '  expected: %s\n' "$SESSION_DIR_EXPECTED" >&2
+  printf '  actual:   %s\n' "$SESSION_DIR_ACTUAL" >&2
+  printf '  If you copied/moved the session dir, regenerate run.sh via /auto-session --resume.\n' >&2
+  exit 2
+fi
+
+# Sanity: prompt.md must exist. Without it, the coordinator has no brief.
+if [ ! -f "$SESSION_DIR_ACTUAL/prompt.md" ]; then
+  printf 'run.sh: no prompt.md at %s — session dir is corrupt or incomplete.\n' "$SESSION_DIR_ACTUAL" >&2
+  exit 3
+fi
+
+# Sanity: .claude/settings.local.json must exist. Without it, hooks don't fire.
+if [ ! -f "$SESSION_DIR_ACTUAL/.claude/settings.local.json" ]; then
+  printf 'run.sh: no .claude/settings.local.json — hooks will not fire. Aborting.\n' >&2
+  exit 4
+fi
+
+# ─── cd + launch ──────────────────────────────────────────────────────────────
+cd "$SESSION_DIR_ACTUAL"
+
+# Export slug so hook wrappers can attribute log records without parsing the cwd.
+export AUTOSESSION_SLUG="{{session_slug}}"
+export AUTOSESSION_DIR="$SESSION_DIR_ACTUAL"
+
+# exec so this process is replaced by claude — signals reach the coordinator
+# cleanly, no shell layer to interpret them.
+exec claude "$@"

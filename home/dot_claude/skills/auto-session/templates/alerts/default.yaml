@@ -1,0 +1,51 @@
+# auto-session default notifications policy
+#
+# Governs when and how toasts fire during an autonomous session. The skill
+# embeds (or a user-supplied alternate) into the session's .claude/settings.local.json
+# hook wiring at scaffold time. Users can silence or retune individual categories.
+#
+# Notification categories:
+#   io_block        — Claude Code is blocked waiting for a permission prompt or
+#                     idle user input. Fired by the Notification hook. Soft sound,
+#                     re-nag on a fixed cadence until cancelled by next PreToolUse.
+#   decision_block  — coordinator logged a blocking decision (decision.md entry
+#                     with `blocking: true`). Fired directly by the coordinator
+#                     via `wsl-notify-send --urgent`. Urgent/persistent. No re-nag.
+#   compaction      — SessionStart:compact hook fired; coordinator is rehydrating
+#                     context. Informational.
+#   session_end     — coordinator ran shutdown successfully. Informational.
+#
+# Sound values must be from the wsl-notify-send shim's ValidSet. As of 2026-04-21,
+# BurntToast v1.1.0 exposes: Default, IM, Mail, Reminder, SMS, Alarm, Looping.Alarm,
+# Looping.Alarm2..10, Looping.Call, Looping.Call2..10. The shim's current ValidSet
+# is narrower; see ~/.local/bin/wsl-notify-send.
+
+notifications:
+
+  io_block:
+    enabled: true
+    sound: "IM"                       # soft sound; falls back to Reminder if IM not in shim ValidSet
+    urgent: false                     # ephemeral (~5s on-screen, migrates to Action Center)
+    nag_interval_seconds: 60
+    nag_max_iterations: 30            # hard cap: 30 minutes of re-nagging
+
+  decision_block:
+    enabled: true
+    sound: "Alarm"                    # or Looping.Alarm if the shim supports it
+    urgent: true                      # persistent on-screen until dismissed
+    # No re-nag — persistence makes it redundant
+
+  compaction:
+    enabled: true
+    sound: "Reminder"
+    urgent: false
+
+  session_end:
+    enabled: true
+    sound: "Reminder"
+    urgent: false
+
+# Scaffold-time validation:
+# - enabled:true + sound not in shim ValidSet → scaffold warns and falls back to Default
+# - nag_interval_seconds < 30 rejected (rate-limit protection)
+# - nag_max_iterations * nag_interval_seconds > 3600 warned (>1hr of re-nagging is usually unintended)
