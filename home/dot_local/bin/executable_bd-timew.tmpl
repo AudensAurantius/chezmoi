@@ -178,22 +178,21 @@ def get_cli_arguments() -> argparse.Namespace:
     # -- cleanup -------------------------------------------------------------
     p_cleanup = sub.add_parser(
         "cleanup",
-        help="Commit pending Dolt changes, compact history, and run GC.",
+        help="Compact Dolt history and run GC; optionally commit first.",
         description=(
-            "Runs the three-phase Beads maintenance sequence for the active "
-            "project (or --project-dir):\n"
-            "  1. bd dolt commit  — seal pending writes into one commit\n"
-            "  2. bd compact      — squash commits older than --days\n"
-            "  3. bd gc           — compact journal, reclaim disk space\n\n"
-            "This command is also the body of the systemd service installed "
-            "by  init-project --install-systemd."
+            "Runs Beads maintenance for the active project (or --project-dir):\n"
+            "  1. bd compact  — squash commits older than --days\n"
+            "  2. bd gc       — compact journal, reclaim disk space\n\n"
+            "Pass --commit to also seal pending batch writes before compacting.\n"
+            "The systemd service (installed by init-project --install-systemd) "
+            "always passes --commit."
         ),
         formatter_class=HelpFormatter,
         epilog=(
             "Examples:\n"
             "  bd-timew cleanup\n"
-            "  bd-timew cleanup --days 14\n"
-            "  bd-timew cleanup --skip-commit --project-dir ~/Source/Other\n"
+            "  bd-timew cleanup --commit\n"
+            "  bd-timew cleanup --days 14 --project-dir ~/Source/Other\n"
         ),
     )
     p_cleanup.add_argument(
@@ -201,8 +200,8 @@ def get_cli_arguments() -> argparse.Namespace:
         help="Retain this many days of Dolt commit history.",
     )
     p_cleanup.add_argument(
-        "--skip-commit", action="store_true",
-        help="Skip  bd dolt commit  (useful when the working set is clean).",
+        "--commit", action="store_true",
+        help="Run  bd dolt commit  before compacting (seals pending batch writes).",
     )
     p_cleanup.add_argument(
         "--project-dir", type=Path, default=None,
@@ -474,7 +473,7 @@ def cmd_status() -> None:
 def cmd_cleanup(
     days: int,
     *,
-    skip_commit: bool = False,
+    commit: bool = False,
     project_dir: Path | None = None,
 ) -> None:
     beads_dir = find_beads_dir(project_dir)
@@ -484,9 +483,9 @@ def cmd_cleanup(
     )
     bd = ["bd", "--db", str(beads_dir / "embeddeddolt" / beads_dir.parent.name)]
 
-    log.info("Starting cleanup (days=%d, skip_commit=%s)", days, skip_commit)
+    log.info("Starting cleanup (days=%d, commit=%s)", days, commit)
 
-    if not skip_commit:
+    if commit:
         log.info("Phase 1/3: dolt commit")
         result = run([*bd, "dolt", "commit"], check=False, capture=True)
         if result.returncode != 0:
@@ -497,7 +496,7 @@ def cmd_cleanup(
         else:
             log.info("dolt commit: %s", result.stdout.strip())
     else:
-        log.info("Phase 1/3: dolt commit (skipped)")
+        log.info("Phase 1/3: dolt commit (skipped — pass --commit to include)")
 
     log.info("Phase 2/3: compact --days %d", days)
     result = run(
@@ -751,6 +750,7 @@ def cmd_run_service() -> None:
         try:
             cmd_cleanup(
                 days=repo.get("compact_days", 7),
+                commit=True,
                 project_dir=Path(path),
             )
             state.setdefault(path, {})["last_run"] = now.isoformat()
@@ -783,7 +783,7 @@ def main() -> None:
     elif args.cmd == "cleanup":
         cmd_cleanup(
             args.days,
-            skip_commit=args.skip_commit,
+            commit=args.commit,
             project_dir=args.project_dir,
         )
     elif args.cmd == "init-project":
