@@ -62,6 +62,7 @@ REPOS_CONFIG = Path.home() / ".config" / "bd-timew" / "repos.yaml"
 CLEANUP_STATE = Path.home() / ".cache" / "bd-timew" / "cleanup-state.json"
 CLEANUP_LOG = Path.home() / ".cache" / "bd-timew" / "cleanup.log"
 ACTIVITY_STATE = Path.home() / ".cache" / "bd-timew" / "activity-state.json"
+QUEUE_FILE = "queue.yaml"
 
 _ENVRC_MARKER = "# bd-timew: beads dolt server"
 _ENVRC_STANZA = """\
@@ -384,6 +385,70 @@ def get_cli_arguments() -> argparse.Namespace:
     p_server_stop.add_argument(
         "--path", type=Path, default=None,
         help="Project root to stop. Omit to stop all registered repos.",
+    )
+
+    # -- queue subcommands (flat top-level, no 'queue' prefix) ------------------
+    # Shared parent parser for --scope and --project-dir
+    _q_parent = argparse.ArgumentParser(add_help=False)
+    _q_parent.add_argument(
+        "--scope", metavar="<scope>", default=None,
+        help=(
+            "Queue scope name. Resolved in order: --scope flag → "
+            "$BD_TIMEW_SCOPE env var → 'default'."
+        ),
+    )
+    _q_parent.add_argument(
+        "--project-dir", type=Path, default=None,
+        help="Project root containing .beads/. Defaults to the active Beads workspace.",
+    )
+
+    p_push = sub.add_parser(
+        "push", parents=[_q_parent],
+        help="Append one or more beads to the tail of a queue scope.",
+        formatter_class=HelpFormatter,
+    )
+    p_push.add_argument("ids", nargs="+", metavar="<id>")
+
+    p_unshift = sub.add_parser(
+        "unshift", parents=[_q_parent],
+        help="Prepend a bead to the head of a queue scope (moves it if already present).",
+        formatter_class=HelpFormatter,
+    )
+    p_unshift.add_argument("bead_id", metavar="<id>")
+
+    sub.add_parser(
+        "pop", parents=[_q_parent],
+        help="Remove and print the head bead of a queue scope.",
+        formatter_class=HelpFormatter,
+    )
+
+    sub.add_parser(
+        "peek", parents=[_q_parent],
+        help="Print the head bead of a queue scope without removing it.",
+        formatter_class=HelpFormatter,
+    )
+
+    sub.add_parser(
+        "queue", parents=[_q_parent],
+        help="List queue contents (all scopes, or one scope with --scope).",
+        description=(
+            "Without --scope (and $BD_TIMEW_SCOPE unset): lists all scopes with headers.\n"
+            "With --scope <name> or $BD_TIMEW_SCOPE: lists only that scope."
+        ),
+        formatter_class=HelpFormatter,
+    )
+
+    p_remove = sub.add_parser(
+        "remove", parents=[_q_parent],
+        help="Remove one or more beads from a queue scope by ID.",
+        formatter_class=HelpFormatter,
+    )
+    p_remove.add_argument("ids", nargs="+", metavar="<id>")
+
+    sub.add_parser(
+        "clear", parents=[_q_parent],
+        help="Empty a queue scope. Use --scope all to clear every scope.",
+        formatter_class=HelpFormatter,
     )
 
     return parser.parse_args()
@@ -1396,6 +1461,137 @@ def cmd_server_stop(path: Path | None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Queue helpers
+# ---------------------------------------------------------------------------
+
+def _resolve_scope(scope_arg: str | None) -> str:
+    """Resolve scope: --scope flag → $BD_TIMEW_SCOPE → 'default'. Passes 'all' through."""
+    if scope_arg is not None:
+        return scope_arg
+    env_scope = os.environ.get("BD_TIMEW_SCOPE", "").strip()
+    return env_scope if env_scope else "default"
+
+
+def _load_all_queues(beads_dir: Path) -> dict[str, list[str]]:
+    path = beads_dir / QUEUE_FILE
+    if not path.exists():
+        return {}
+    with path.open() as f:
+        data = yaml.safe_load(f) or {}
+    return {k: list(v or []) for k, v in data.items() if isinstance(v, list)}
+
+
+def _save_all_queues(beads_dir: Path, data: dict[str, list[str]]) -> None:
+    path = beads_dir / QUEUE_FILE
+    cleaned = {k: v for k, v in data.items() if v}
+    if cleaned:
+        with path.open("w") as f:
+            yaml.dump(cleaned, f, default_flow_style=False, allow_unicode=True)
+    elif path.exists():
+        path.unlink()
+
+
+def cmd_queue(
+    action: str,
+    *,
+    ids: list[str] | None = None,
+    scope_arg: str | None = None,
+    project_dir: Path | None = None,
+) -> None:
+    beads_dir = find_beads_dir(project_dir)
+    # Track whether scope was set explicitly (flag or env var) for list's show-all logic
+    explicit_scope = scope_arg is not None or bool(os.environ.get("BD_TIMEW_SCOPE", "").strip())
+    scope = _resolve_scope(scope_arg)
+    all_queues = _load_all_queues(beads_dir)
+
+    if action == "list":
+        if not explicit_scope:
+            if not all_queues:
+                _root_log.info("All queues are empty")
+                return
+            for scope_name, queue in all_queues.items():
+                if queue:
+                    print(f"[{scope_name}]")
+                    for i, bead_id in enumerate(queue, 1):
+                        print(f"  {i:2d}. {bead_id}")
+        else:
+            queue = all_queues.get(scope, [])
+            if not queue:
+                _root_log.info("Queue '%s' is empty", scope)
+                return
+            for i, bead_id in enumerate(queue, 1):
+                print(f"{i:2d}. {bead_id}")
+
+    elif action == "push":
+        if not ids:
+            sys.exit("bd-timew push: requires at least one <id>")
+        queue = all_queues.get(scope, [])
+        added = [i for i in ids if i not in queue]
+        already = [i for i in ids if i in queue]
+        queue.extend(added)
+        all_queues[scope] = queue
+        _save_all_queues(beads_dir, all_queues)
+        if added:
+            _root_log.info("[%s] Pushed: %s", scope, ", ".join(added))
+        if already:
+            _root_log.warning("[%s] Already in queue (skipped): %s", scope, ", ".join(already))
+
+    elif action == "unshift":
+        if not ids or len(ids) != 1:
+            sys.exit("bd-timew unshift: requires exactly one <id>")
+        bead_id = ids[0]
+        queue = all_queues.get(scope, [])
+        if bead_id in queue:
+            queue.remove(bead_id)
+        queue.insert(0, bead_id)
+        all_queues[scope] = queue
+        _save_all_queues(beads_dir, all_queues)
+        _root_log.info("[%s] Prepended: %s", scope, bead_id)
+
+    elif action == "pop":
+        queue = all_queues.get(scope, [])
+        if not queue:
+            _root_log.info("Queue '%s' is empty", scope)
+            return
+        head = queue.pop(0)
+        all_queues[scope] = queue
+        _save_all_queues(beads_dir, all_queues)
+        print(head)
+
+    elif action == "peek":
+        queue = all_queues.get(scope, [])
+        if not queue:
+            _root_log.info("Queue '%s' is empty", scope)
+            return
+        print(queue[0])
+
+    elif action == "remove":
+        if not ids:
+            sys.exit("bd-timew remove: requires at least one <id>")
+        queue = all_queues.get(scope, [])
+        removed = []
+        for bead_id in ids:
+            if bead_id in queue:
+                queue.remove(bead_id)
+                removed.append(bead_id)
+            else:
+                _root_log.warning("[%s] %s not in queue", scope, bead_id)
+        if removed:
+            all_queues[scope] = queue
+            _save_all_queues(beads_dir, all_queues)
+            _root_log.info("[%s] Removed: %s", scope, ", ".join(removed))
+
+    elif action == "clear":
+        if scope == "all":
+            _save_all_queues(beads_dir, {})
+            _root_log.info("All queues cleared")
+        else:
+            all_queues.pop(scope, None)
+            _save_all_queues(beads_dir, all_queues)
+            _root_log.info("Queue '%s' cleared", scope)
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -1442,6 +1638,21 @@ def main() -> None:
         cmd_servers()
     elif args.cmd == "server-stop":
         cmd_server_stop(args.path)
+    elif args.cmd in ("push", "unshift", "pop", "peek", "queue", "remove", "clear"):
+        if args.cmd == "push":
+            ids = args.ids
+        elif args.cmd == "unshift":
+            ids = [args.bead_id]
+        elif args.cmd == "remove":
+            ids = args.ids
+        else:
+            ids = None
+        cmd_queue(
+            "list" if args.cmd == "queue" else args.cmd,
+            ids=ids,
+            scope_arg=args.scope,
+            project_dir=args.project_dir,
+        )
 
 
 if __name__ == "__main__":
