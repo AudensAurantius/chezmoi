@@ -401,6 +401,10 @@ def get_cli_arguments() -> argparse.Namespace:
         "--project-dir", type=Path, default=None,
         help="Project root containing .beads/. Defaults to the active Beads workspace.",
     )
+    _q_parent.add_argument(
+        "--verbose", "-v", action="store_true", default=False,
+        help="Show bead titles alongside IDs (fetches each bead from bd; slower for large queues).",
+    )
 
     p_push = sub.add_parser(
         "push", parents=[_q_parent],
@@ -1464,6 +1468,14 @@ def cmd_server_stop(path: Path | None) -> None:
 # Queue helpers
 # ---------------------------------------------------------------------------
 
+def _fetch_title(bead_id: str) -> str:
+    """Return the bead title, or '' on any error (non-fatal)."""
+    try:
+        return get_issue(bead_id).get("title", "")
+    except SystemExit:
+        return ""
+
+
 def _resolve_scope(scope_arg: str | None) -> str:
     """Resolve scope: --scope flag → $BD_TIMEW_SCOPE → 'default'. Passes 'all' through."""
     if scope_arg is not None:
@@ -1497,12 +1509,19 @@ def cmd_queue(
     ids: list[str] | None = None,
     scope_arg: str | None = None,
     project_dir: Path | None = None,
+    verbose: bool = False,
 ) -> None:
     beads_dir = find_beads_dir(project_dir)
     # Track whether scope was set explicitly (flag or env var) for list's show-all logic
     explicit_scope = scope_arg is not None or bool(os.environ.get("BD_TIMEW_SCOPE", "").strip())
     scope = _resolve_scope(scope_arg)
     all_queues = _load_all_queues(beads_dir)
+
+    def _fmt(bead_id: str) -> str:
+        if not verbose:
+            return bead_id
+        title = _fetch_title(bead_id)
+        return f"{bead_id}  {title}" if title else bead_id
 
     if action == "list":
         if not explicit_scope:
@@ -1513,14 +1532,14 @@ def cmd_queue(
                 if queue:
                     print(f"[{scope_name}]")
                     for i, bead_id in enumerate(queue, 1):
-                        print(f"  {i:2d}. {bead_id}")
+                        print(f"  {i:2d}. {_fmt(bead_id)}")
         else:
             queue = all_queues.get(scope, [])
             if not queue:
                 _root_log.info("Queue '%s' is empty", scope)
                 return
             for i, bead_id in enumerate(queue, 1):
-                print(f"{i:2d}. {bead_id}")
+                print(f"{i:2d}. {_fmt(bead_id)}")
 
     elif action == "push":
         if not ids:
@@ -1557,6 +1576,10 @@ def cmd_queue(
         all_queues[scope] = queue
         _save_all_queues(beads_dir, all_queues)
         print(head)
+        if verbose:
+            title = _fetch_title(head)
+            if title:
+                _root_log.info("%s  %s", head, title)
 
     elif action == "peek":
         queue = all_queues.get(scope, [])
@@ -1564,6 +1587,10 @@ def cmd_queue(
             _root_log.info("Queue '%s' is empty", scope)
             return
         print(queue[0])
+        if verbose:
+            title = _fetch_title(queue[0])
+            if title:
+                _root_log.info("%s  %s", queue[0], title)
 
     elif action == "remove":
         if not ids:
@@ -1652,6 +1679,7 @@ def main() -> None:
             ids=ids,
             scope_arg=args.scope,
             project_dir=args.project_dir,
+            verbose=args.verbose,
         )
 
 
