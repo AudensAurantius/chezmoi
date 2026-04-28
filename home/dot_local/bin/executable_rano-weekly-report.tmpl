@@ -3,18 +3,19 @@
 #
 # Invoked by rano-weekly-report.service (timer-driven). Always writes the
 # report to ~/.local/share/rano/reports/rano-report-<YYYY-MM-DD>.md as a
-# safety net; attempts email delivery via `mail` but exits 0 either way
-# so a mail failure doesn't flap the systemd timer status.
+# safety net; attempts email delivery via graph-send-mail (Microsoft Graph
+# API) but exits 0 either way so a delivery failure doesn't flap the
+# systemd timer status.
 #
 # Email recipient defaults to mhaynes@boldorange.com (per the rano
 # adoption plan, see bd memories rano-adoption-counter-rationale).
 # Override via the RANO_REPORT_EMAIL env var. Set RANO_REPORT_EMAIL=""
 # to disable email entirely (report still saved to disk).
 #
-# Email requires a working local MTA. msmtp is installed but not
-# configured on this host — if delivery fails, the failure is logged to
-# stderr and the report file path is reported so the user can cat|mail
-# manually or configure msmtp later.
+# graph-send-mail must be installed via:
+#   pipx install -e ~/.local/src/graph-send-mail/
+# On first run it will prompt for interactive device-code auth; subsequent
+# runs use the cached token at ~/.local/share/graph-send-mail/token_cache.json.
 
 set -euo pipefail
 
@@ -124,19 +125,20 @@ if [ -z "$RECIPIENT" ]; then
   exit 0
 fi
 
-if ! command -v mail >/dev/null 2>&1; then
-  echo "rano-weekly-report: 'mail' command not found; report saved to disk only" >&2
+if ! command -v graph-send-mail >/dev/null 2>&1; then
+  echo "rano-weekly-report: graph-send-mail not found; report saved to disk only" >&2
+  echo "rano-weekly-report: install with: pipx install -e ~/.local/src/graph-send-mail/" >&2
   exit 0
 fi
 
 subject="rano weekly report — ${TODAY} ($(hostname))"
-if mail -s "$subject" "$RECIPIENT" < "$REPORT_FILE"; then
+if graph-send-mail --to "$RECIPIENT" --subject "$subject" --body-file "$REPORT_FILE"; then
   echo "rano-weekly-report: emailed to $RECIPIENT" >&2
 else
   rc=$?
-  echo "rano-weekly-report: mail delivery failed (exit $rc); report still at $REPORT_FILE" >&2
-  echo "rano-weekly-report: configure msmtp or fix local MTA, then re-run:" >&2
-  echo "  mail -s \"$subject\" $RECIPIENT < $REPORT_FILE" >&2
+  echo "rano-weekly-report: delivery failed (exit $rc); report still at $REPORT_FILE" >&2
+  echo "rano-weekly-report: re-run manually:" >&2
+  echo "  graph-send-mail --to \"$RECIPIENT\" --subject \"$subject\" --body-file \"$REPORT_FILE\"" >&2
 fi
 
 # Exit 0 regardless — report on disk is the source of truth.
