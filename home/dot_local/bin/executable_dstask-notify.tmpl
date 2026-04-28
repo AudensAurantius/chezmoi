@@ -1,0 +1,88 @@
+{{ if and (lookPath "dstask") (lookPath .notifier) -}}
+#!/usr/bin/env python3
+# dstask-notify: morning digest of tasks due today or overdue.
+#
+# Reads all dstask tasks, filters for those due on or before end-of-day,
+# and fires a single toast notification. Scenario maps to the highest-priority
+# task due: P1 → alarm, P2/P3/none → reminder. Always sends a notification —
+# "No tasks due today" if nothing is due.
+#
+# Invoked by dstask-notify.service, triggered by dstask-notify.timer
+# (weekdays 09:30 local time).
+
+import datetime
+import json
+import subprocess
+import sys
+
+NOTIFIER = "{{ .notifier }}"
+PRIORITY_RANK = {"P1": 0, "P2": 1, "P3": 2, "": 3}
+
+
+def main() -> None:
+    result = subprocess.run(["dstask", "export"], capture_output=True, text=True)
+    if result.returncode != 0 or not result.stdout.strip():
+        return
+
+    try:
+        tasks = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    end_of_today = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    due_tasks: list[tuple[datetime.datetime, dict]] = []
+    for task in tasks:
+        if task.get("status") not in ("pending", "active"):
+            continue
+        due_str = task.get("due", "")
+        if not due_str:
+            continue
+        try:
+            due_dt = datetime.datetime.fromisoformat(due_str.replace("Z", "+00:00"))
+            if due_dt <= end_of_today:
+                due_tasks.append((due_dt, task))
+        except ValueError:
+            continue
+
+    if not due_tasks:
+        subprocess.run(
+            [NOTIFIER, "--scenario", "reminder", "--group", "dstask-notify",
+             "dstask: nothing due today", "No tasks are overdue or due today."],
+            check=False,
+        )
+        return
+
+    # Overdue first, then upcoming; within each group sort by priority then time.
+    due_tasks.sort(key=lambda x: (
+        x[0] > now,
+        PRIORITY_RANK.get(x[1].get("priority", ""), 3),
+        x[0],
+    ))
+
+    max_rank = min(PRIORITY_RANK.get(t.get("priority", ""), 3) for _, t in due_tasks)
+    scenario = "alarm" if max_rank == 0 else "reminder"
+
+    lines = []
+    for due_dt, task in due_tasks:
+        priority = task.get("priority", "") or "--"
+        summary = task.get("summary", "(no summary)")
+        local_due = due_dt.astimezone()
+        time_str = local_due.strftime("%-I:%M %p")
+        overdue = " ⚠ OVERDUE" if due_dt < now else ""
+        lines.append(f"[{priority}] {summary} — {time_str}{overdue}")
+
+    count = len(due_tasks)
+    title = f"dstask: {count} task{'s' if count != 1 else ''} due today"
+    body = "\n".join(lines)
+
+    subprocess.run(
+        [NOTIFIER, "--scenario", scenario, "--group", "dstask-notify", title, body],
+        check=False,
+    )
+
+
+if __name__ == "__main__":
+    main()
+{{- end }}

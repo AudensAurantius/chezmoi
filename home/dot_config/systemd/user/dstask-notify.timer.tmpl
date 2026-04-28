@@ -1,0 +1,12 @@
+{{ if and (lookPath "dstask") (lookPath .notifier) -}}
+[Unit]
+Description=dstask due-today digest — weekdays at 09:30
+
+[Timer]
+OnCalendar=Mon-Fri *-*-* 09:30:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
+{{- end }}
