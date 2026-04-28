@@ -20,6 +20,10 @@ timestamps:
     at: 2026-04-21T23:00:00-05:00
     actor: Michael Haynes
     note: "Added --status <state> flag; transitions the OUTGOING bead (the one the interval is being stopped on) before starting the new interval. Mirrors the new flag on /stop."
+  - action: updated
+    at: 2026-04-27T22:00:00-05:00
+    actor: Michael Haynes
+    note: "Always resolve the outgoing bead ID before stopping and pass it to bd-timew stop <id> via --from. Prevents concurrent-session cross-contamination (bd-timew stop with no args stops ALL active timew intervals)."
 comments:
   - "Source: J121-9kp.1 Wave 1 time-tracking bundle (2026-04-20). Companion to /start, /stop, /status."
   - "Motivation: stopping the current interval and starting a new one were two commands with a window for forgetting the second step. /switch fuses the pair."
@@ -53,14 +57,15 @@ Arguments: $ARGUMENTS
 
    If both positional ID and `--jira` are present → usage error and stop. If any unrecognized tokens remain after removing the above → usage error and stop.
 
-2. **Stop the current interval, with optional status transition.** Follow the instructions of `/stop`, passing through `--status <state>` if the user supplied it. Specifically:
-   - If `--status` was **not** given: run `bd-timew stop` via Bash and report.
-   - If `--status` **was** given: resolve the active bead (via `bd-timew status`), run `bd-timew stop`, then `bd update <outgoing-id> --status=<state>`.
-   - Treat "no active interval" as a normal no-op **only if `--status` was not given**. If `--status` was given but nothing is running, print:
+2. **Stop the current interval, with optional status transition.**
+   - **Always** run `bd-timew status` first to get the outgoing bead ID (`outgoing_id`). Passing it explicitly to `bd-timew stop` ensures only this session's interval is halted — `bd-timew stop` with no argument stops all active timew intervals, breaking concurrent sessions tracking different beads.
+   - If no active interval and `--status` was given, print:
      ```
      /switch: --status requires an active timew interval with a bead tag.
      ```
-     and stop — do not proceed to start the new interval. Otherwise the user would have a status flag that silently did nothing and a timer that started anyway, hiding the mistake.
+     and stop — do not proceed to start the new interval.
+   - Run `bd-timew stop <outgoing_id>` (or `bd-timew stop` if `outgoing_id` is None) and report.
+   - If `--status` was given and `outgoing_id` was resolved, run `bd update <outgoing_id> --status=<state>`.
 
 3. **Start the new interval.** Follow the instructions of `/start` with the bead-identification portion of `$ARGUMENTS` (strip out `--status <state>` / `--status=<state>` before delegating — /start doesn't recognize it). This means the full /start flow: Jira key resolution (if `--jira` was given), bridge invocation, tuple-correctness check, task-dir scaffold prompt, and proceed-to-implementation.
 

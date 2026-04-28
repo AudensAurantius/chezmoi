@@ -17,6 +17,10 @@ timestamps:
     at: 2026-04-21T23:00:00-05:00
     actor: Michael Haynes
     note: "Added --status <state> flag to transition the active bead to a target status (e.g. review, testing, blocked) in the same action as stopping the timer. Motivated by custom status additions (review, testing) on 2026-04-21."
+  - action: updated
+    at: 2026-04-27T22:00:00-05:00
+    actor: Michael Haynes
+    note: "Always resolve active bead ID before stopping and pass it explicitly to bd-timew stop <id>, preventing concurrent-session cross-contamination (bd-timew stop with no args stops ALL active timew intervals)."
 comments:
   - "Source: J121-9kp.1 Wave 1 time-tracking bundle (2026-04-20). Companion to /start, /switch, /status."
   - "Motivation: breaks, end-of-day, context-switching to non-bead work all need a clean timer stop. Independent of bead status so that in-progress beads stay in-progress when the user steps away. --status added 2026-04-21 for the common pattern 'this chunk of work is done, move it to review/testing' — previously required a separate bd update after /stop."
@@ -37,17 +41,19 @@ Arguments: $ARGUMENTS
    /stop: unrecognized argument
    usage: /stop [--status <state>]
    ```
-   and stop. If no arguments, proceed to step 3 with `target_status` unset.
+   and stop. If no arguments, proceed to step 2 with `target_status` unset.
 
-2. **Resolve the active bead (only if `--status` was given).** Run `bd-timew status` via Bash and parse the `Tracking:` line to extract the bead ID. If the output is `bd-timew: no active timew interval.` or the ID can't be parsed, print:
-   ```
-   /stop: --status requires an active timew interval with a bead tag.
-   ```
-   and stop. Do not guess the bead from recent activity.
+2. **Resolve the active bead.** Run `bd-timew status` via Bash and parse the `Tracking:` line to extract the bead ID. Save it as `active_id`.
+   - If no active interval (output contains "no active timew interval"), set `active_id = None`.
+   - If `--status` was given and `active_id` is None, print:
+     ```
+     /stop: --status requires an active timew interval with a bead tag.
+     ```
+     and stop. Do not guess the bead from recent activity.
 
-3. **Stop the interval.** Run `bd-timew stop` via Bash. Report the output (timew shows the interval summary — start, end, duration, tags). If stdout is empty and exit is non-zero, surface stderr. If timew reports "There is no active time tracking", say so plainly — normal state, no error.
+3. **Stop the interval.** Run `bd-timew stop <active_id>` if `active_id` is set, otherwise `bd-timew stop`. Passing the bead ID explicitly ensures only this session's interval is stopped — `bd-timew stop` with no argument halts all active timew intervals, which breaks concurrent sessions tracking different beads. Report the output (timew shows the interval summary — start, end, duration, tags). If timew reports "There is no active time tracking", say so plainly — normal state, no error.
 
-4. **Transition the bead (only if `--status` was given and step 2 found a bead).** Run `bd update <resolved_id> --status=<state>` via Bash. Report the output. If bd rejects the status (invalid for this workspace — e.g., not a built-in and not in `status.custom`), surface the error verbatim so the user can correct it or register the custom status. Do not retry with a fallback.
+4. **Transition the bead (only if `--status` was given and step 2 found a bead).** Run `bd update <active_id> --status=<state>` via Bash. Report the output. If bd rejects the status (invalid for this workspace — e.g., not a built-in and not in `status.custom`), surface the error verbatim so the user can correct it or register the custom status. Do not retry with a fallback.
 
 5. **Do not claim or close the bead automatically.** `--status` only performs the one transition the user asked for. If the user wants `closed`, they can pass `--status=closed`; the command treats it like any other status.
 

@@ -142,10 +142,23 @@ def get_cli_arguments() -> argparse.Namespace:
     p_start.add_argument("issue_id", metavar="<issue-id>")
 
     # -- stop ----------------------------------------------------------------
-    sub.add_parser(
+    p_stop = sub.add_parser(
         "stop",
         help="Stop the current Timewarrior interval.",
+        description=(
+            "Stops the Timewarrior interval tagged with <issue-id> if given, "
+            "otherwise stops all active intervals ('timew stop' with no args). "
+            "Passing the issue ID explicitly is strongly recommended when multiple "
+            "Claude sessions may be tracking different beads concurrently — without "
+            "it, 'timew stop' halts every active interval regardless of which "
+            "session started it. The /stop skill should always pass the session's "
+            "current bead ID here."
+        ),
         formatter_class=HelpFormatter,
+    )
+    p_stop.add_argument(
+        "issue_id", metavar="<issue-id>", nargs="?", default=None,
+        help="Stop only the interval tagged with this bead ID (recommended).",
     )
 
     # -- switch --------------------------------------------------------------
@@ -153,12 +166,18 @@ def get_cli_arguments() -> argparse.Namespace:
         "switch",
         help="Stop current interval and start a new one on <issue-id>.",
         description=(
-            "Equivalent to  stop  then  start <issue-id>. Not transactional: "
-            "if start fails after stop succeeds, re-run  bd-timew start <id>  to recover."
+            "Equivalent to  stop [from-issue-id]  then  start <issue-id>. "
+            "Not transactional: if start fails after stop succeeds, re-run "
+            "bd-timew start <id>  to recover. Pass --from to stop only the "
+            "named interval rather than all active intervals."
         ),
         formatter_class=HelpFormatter,
     )
     p_switch.add_argument("issue_id", metavar="<issue-id>")
+    p_switch.add_argument(
+        "--from", dest="from_issue_id", metavar="<issue-id>", default=None,
+        help="Stop only the interval tagged with this bead ID (recommended).",
+    )
 
     # -- status --------------------------------------------------------------
     sub.add_parser(
@@ -514,18 +533,21 @@ def cmd_start(issue_id: str, *, dry_run: bool = False) -> None:
     _record_activity(str(beads_dir.parent.resolve()))
 
 
-def cmd_stop() -> None:
+def cmd_stop(issue_id: str | None = None) -> None:
     # Record activity before stopping so the timestamp reflects last use.
     result = run(["bd", "where"], check=False, capture=True)
     if result.returncode == 0:
         project_path = result.stdout.strip().split("\n", 1)[0].strip()
         beads_dir = Path(project_path)
         _record_activity(str(beads_dir.parent.resolve()))
-    run(["timew", "stop"], check=False)
+    if issue_id:
+        run(["timew", "stop", issue_id], check=False)
+    else:
+        run(["timew", "stop"], check=False)
 
 
-def cmd_switch(issue_id: str) -> None:
-    cmd_stop()
+def cmd_switch(issue_id: str, *, from_issue_id: str | None = None) -> None:
+    cmd_stop(from_issue_id)
     cmd_start(issue_id)
 
 
@@ -827,6 +849,79 @@ def _update_envrc(project_path: Path, pass_path: str) -> None:
     _root_log.info("Run `direnv allow %s` to activate the new stanza.", project_path)
 
 
+def _provision_dolt_user(
+    project_root: Path, dolt_user: str, pass_path: str,
+) -> None:
+    """Create or update the Dolt MySQL user with the password from `pass`.
+
+    `bd dolt set user` only writes client-side metadata.json; the Dolt
+    server's mysql.user table is independent and must be updated separately.
+    Without this step, bd commands fail with `Access denied` on first
+    connection after a fresh server-mode init.
+
+    Idempotent: uses CREATE USER IF NOT EXISTS + ALTER USER + GRANT for the
+    'localhost', '127.0.0.1', and '%' host variants.
+    """
+    if not shutil.which("mysql"):
+        _root_log.warning(
+            "mysql client not found on PATH; skipping Dolt user provisioning. "
+            "Create the user manually: CREATE USER '%s'@'localhost' IDENTIFIED BY ...",
+            dolt_user,
+        )
+        return
+
+    pw_result = run(["pass", "show", pass_path], check=False, capture=True)
+    if pw_result.returncode != 0:
+        _root_log.warning(
+            "pass show %s failed; skipping Dolt user provisioning.", pass_path,
+        )
+        return
+    password = pw_result.stdout.split("\n", 1)[0]
+    if not password:
+        _root_log.warning(
+            "pass entry %s has empty first line; skipping Dolt user provisioning.",
+            pass_path,
+        )
+        return
+
+    show = run(["bd", "dolt", "show"], check=False, capture=True, cwd=project_root)
+    host = "127.0.0.1"
+    port = "3306"
+    for line in show.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("Host:"):
+            host = line.split(":", 1)[1].strip()
+        elif line.startswith("Port:"):
+            port = line.split(":", 1)[1].strip()
+
+    # SQL string-literal escape: double any single quote. Bash's
+    # ${var//\'/\'\'} expansion produces backslash-quote pairs (4 chars),
+    # not the doubled-quote pairs MySQL expects — pure-Python string
+    # replace is the only safe path here.
+    pw_esc = password.replace("'", "''")
+
+    stmts = []
+    for h in ("localhost", "127.0.0.1", "%"):
+        stmts.append(f"CREATE USER IF NOT EXISTS '{dolt_user}'@'{h}' IDENTIFIED BY '{pw_esc}';")
+        stmts.append(f"ALTER USER '{dolt_user}'@'{h}' IDENTIFIED BY '{pw_esc}';")
+        stmts.append(f"GRANT ALL PRIVILEGES ON *.* TO '{dolt_user}'@'{h}' WITH GRANT OPTION;")
+    stmts.append("FLUSH PRIVILEGES;")
+    sql = "\n".join(stmts) + "\n"
+
+    proc = subprocess.run(
+        ["mysql", "-h", host, "-P", port, "-u", "root", "--protocol=TCP"],
+        input=sql, text=True, capture_output=True, check=False,
+    )
+    if proc.returncode != 0:
+        _root_log.warning(
+            "Dolt user provisioning failed (mysql exit %d): %s",
+            proc.returncode, proc.stderr.strip(),
+        )
+        return
+    _root_log.info("Dolt user %s provisioned on %s:%s (localhost, 127.0.0.1, %%)",
+                   dolt_user, host, port)
+
+
 # ---------------------------------------------------------------------------
 # init-project
 # ---------------------------------------------------------------------------
@@ -924,8 +1019,10 @@ def cmd_init_project(
     ]
     if no_git_ops:
         settings.append(("no-git-ops", "true"))
-    for status in effective_statuses:
-        settings.append(("status.custom", status))
+    if effective_statuses:
+        # bd's status.custom is comma-separated; `bd config set` is replace-not-append,
+        # so we must join into a single value rather than calling set per status.
+        settings.append(("status.custom", ",".join(effective_statuses)))
 
     for key, value in settings:
         result = run(
@@ -981,6 +1078,7 @@ def cmd_init_project(
                     )
                 _provision_pass_entry(effective_pass_path, yes=yes)
                 _update_envrc(project_root, effective_pass_path)
+                _provision_dolt_user(project_root, effective_user, effective_pass_path)
 
     # -- Update repos.yaml entry ----------------------------------------------
     repo_entry: dict = existing_entry if existing_entry is not None else {}
@@ -1311,9 +1409,9 @@ def main() -> None:
     if args.cmd == "start":
         cmd_start(args.issue_id)
     elif args.cmd == "stop":
-        cmd_stop()
+        cmd_stop(args.issue_id)
     elif args.cmd == "switch":
-        cmd_switch(args.issue_id)
+        cmd_switch(args.issue_id, from_issue_id=args.from_issue_id)
     elif args.cmd == "status":
         cmd_status()
     elif args.cmd == "resolve":
