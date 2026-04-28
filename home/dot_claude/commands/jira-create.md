@@ -18,7 +18,7 @@ related: [/jira-show, /draft-comment, /post-comment, /task-init, "jira-conventio
 
 # /jira-create — Create a Jira issue, mirror to Beads, and scaffold a task dir
 
-Create a Jira issue via the Atlassian MCP tool, mirror it as a Beads issue with `src:jira` + URL-formatted `external_ref` (indistinguishable from a `bd jira sync --pull` result), and scaffold the `tasks/<JIRA-KEY>/` working directory. All three artifacts are linked before the command returns.
+Create a Jira issue via the Atlassian MCP tool, mirror it as a Beads issue with `src:jira` + URL-formatted `external_ref` (indistinguishable from a `bd jira sync --pull` result), and scaffold the `tasks/<bead-id>-<JIRA-KEY>-<slug>/` working directory. All three artifacts are linked before the command returns.
 
 Arguments: $ARGUMENTS
 
@@ -112,13 +112,13 @@ Flags may appear before or after the summary and in any order. The summary is ev
 
 9. **Scaffold the task working directory.**
 
-   - If a project-local `.claude/commands/task-init.md` exists **and** a `tasks/` directory sits at the project root, prefer invoking `/task-init <JIRA-KEY> --bead <bead-id>` equivalent logic. Specifically follow that command's steps (create dir, write `.beads`, stage).
-   - Otherwise perform the minimal inline equivalent:
+   - If a project-local `.claude/commands/task-init.md` exists **and** a `tasks/` directory sits at the project root, prompt the user for a descriptive slug then invoke `/task-init <slug> --bead <bead-id> --jira <JIRA-KEY>`. The full directory name will be constructed as `<bead-id>-<JIRA-KEY>-<slug>` per the J121 convention.
+   - Otherwise perform the minimal inline equivalent (ask the user for a slug first):
 
      ```bash
-     mkdir -p tasks/<JIRA-KEY>
-     printf '%s\n' '<bead-id>' > tasks/<JIRA-KEY>/.beads
-     [ -d tasks/.git ] && git -C tasks add <JIRA-KEY>
+     mkdir -p tasks/<bead-id>-<JIRA-KEY>-<slug>
+     printf '%s\n' '<bead-id>' > tasks/<bead-id>-<JIRA-KEY>-<slug>/.beads
+     [ -d tasks/.git ] && git -C tasks add <bead-id>-<JIRA-KEY>-<slug>
      ```
 
    Do **not** commit. Subdir creation (`scripts/`, `comments/`, etc.) is out of scope — the user adds what they need.
@@ -128,7 +128,7 @@ Flags may appear before or after the summary and in any order. The summary is ev
     ```
     Jira:  <JIRA-KEY>  https://boldorange.atlassian.net/browse/<JIRA-KEY>
     Beads: <bead-id>   (src:jira, priority P<n>)
-    Dir:   tasks/<JIRA-KEY>/   (staged in tasks/ nested repo)
+    Dir:   tasks/<bead-id>-<JIRA-KEY>-<slug>/   (staged in tasks/ nested repo)
     ```
 
     If any optional field was set, list it: assignee, priority, type override.
