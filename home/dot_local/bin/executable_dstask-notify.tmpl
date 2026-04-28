@@ -20,7 +20,9 @@ PRIORITY_RANK = {"P1": 0, "P2": 1, "P3": 2, "": 3}
 
 
 def main() -> None:
-    result = subprocess.run(["dstask", "export"], capture_output=True, text=True)
+    # `dstask next` returns all pending/active tasks as JSON.
+    # `dstask export` is filtered by context and returns nothing by default.
+    result = subprocess.run(["dstask", "next"], capture_output=True, text=True)
     if result.returncode != 0 or not result.stdout.strip():
         return
 
@@ -31,18 +33,19 @@ def main() -> None:
 
     now = datetime.datetime.now(datetime.timezone.utc)
     end_of_today = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+    # Go zero value used by dstask when no due date is set.
+    GO_ZERO = datetime.datetime(1, 1, 1, tzinfo=datetime.timezone.utc)
 
     due_tasks: list[tuple[datetime.datetime, dict]] = []
     for task in tasks:
-        if task.get("status") not in ("pending", "active"):
-            continue
         due_str = task.get("due", "")
         if not due_str:
             continue
         try:
             due_dt = datetime.datetime.fromisoformat(due_str.replace("Z", "+00:00"))
-            if due_dt <= end_of_today:
-                due_tasks.append((due_dt, task))
+            if due_dt == GO_ZERO or due_dt > end_of_today:
+                continue
+            due_tasks.append((due_dt, task))
         except ValueError:
             continue
 
