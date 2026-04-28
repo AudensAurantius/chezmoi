@@ -1,0 +1,25 @@
+# Pinned graph-send-mail release, consumed by run_onchange_install-graph-send-mail.sh.tmpl.
+#
+# graph-send-mail (https://github.com/AudensAurantius/graph-send-mail) sends
+# email via Microsoft Graph API using MSAL device-code auth. Used by
+# rano-weekly-report to deliver the weekly rano activity summary to Outlook.
+#
+# Installed as `pipx install -e ~/.local/src/graph-send-mail/` (editable from
+# a local clone). The install script clones the repo at the pinned tag; the
+# editable install means the pipx venv reflects the checkout immediately for
+# pure-code changes. A version bump here triggers git checkout + pipx reinstall
+# (to pick up any new dependencies).
+#
+# The MSAL token cache lives at ~/.local/share/graph-send-mail/token_cache.json.
+# Config (client_id, domain_name) lives at ~/.config/graph-send-mail/config.ini —
+# managed separately via Chezmoi templates (not by this install script).
+#
+# To bump:
+#   1. Tag the new release on GitHub (git tag vX.Y.Z && git push --tags)
+#   2. Update version: below (strip the leading "v")
+#   3. chezmoi apply — script re-runs automatically due to changed rendered content
+
+graphSendMail:
+  version: "0.1.0"
+  repo_url: "git@github.com:AudensAurantius/graph-send-mail"
+  clone_dir: ".local/src/graph-send-mail"

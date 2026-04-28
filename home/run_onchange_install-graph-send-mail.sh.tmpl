@@ -1,0 +1,58 @@
+#!/bin/sh
+# run_onchange_install-graph-send-mail.sh.tmpl
+#
+# Clone graph-send-mail from GitHub at the pinned tag and install via
+# `pipx install -e`. Editable install means pure-code changes take effect
+# immediately in the pipx venv; a version bump also runs `pipx reinstall`
+# to pick up any changed dependencies.
+#
+# Version pinned in .chezmoidata/graph_send_mail.yaml.
+# graph-send-mail {{ .graphSendMail.version }}
+{{- $v := .graphSendMail.version -}}
+{{- $repo := .graphSendMail.repo_url -}}
+{{- $cloneDir := joinPath .chezmoi.homeDir .graphSendMail.clone_dir }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+REPO_URL={{ $repo | quote }}
+CLONE_DIR={{ $cloneDir | quote }}
+
+if ! command -v pipx >/dev/null 2>&1; then
+  echo "graph-send-mail installer: pipx not found; install it first" >&2
+  exit 1
+fi
+
+if ! command -v git >/dev/null 2>&1; then
+  echo "graph-send-mail installer: git not found" >&2
+  exit 1
+fi
+
+# Idempotency guard: clone is at the right tag AND pipx has it installed.
+if [ -d "$CLONE_DIR/.git" ] \
+    && git -C "$CLONE_DIR" describe --tags --exact-match HEAD 2>/dev/null | grep -qF "v$VERSION" \
+    && pipx list 2>/dev/null | grep -qF "graph-send-mail"; then
+  echo "graph-send-mail installer: v$VERSION already installed" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$CLONE_DIR")"
+
+if [ ! -d "$CLONE_DIR/.git" ]; then
+  echo "graph-send-mail installer: cloning v$VERSION from $REPO_URL" >&2
+  git clone --branch "v$VERSION" --depth 1 "$REPO_URL" "$CLONE_DIR"
+else
+  echo "graph-send-mail installer: updating clone to v$VERSION" >&2
+  git -C "$CLONE_DIR" fetch --tags
+  git -C "$CLONE_DIR" checkout "v$VERSION"
+fi
+
+if pipx list 2>/dev/null | grep -qF "graph-send-mail"; then
+  echo "graph-send-mail installer: reinstalling to pick up dependency changes" >&2
+  pipx reinstall graph-send-mail
+else
+  echo "graph-send-mail installer: installing via pipx (editable)" >&2
+  pipx install -e "$CLONE_DIR"
+fi
+
+echo "graph-send-mail installer: v$VERSION installed" >&2
