@@ -1,0 +1,65 @@
+#!/bin/sh
+# run_onchange_install-bd-timew.sh.tmpl
+#
+# Clone bd-timew from GitHub at the pinned tag and install via
+# `pipx install -e`. Editable install means pure-code changes take effect
+# immediately in the pipx venv; a version bump also runs `pipx reinstall`
+# to pick up any changed dependencies.
+#
+# Version pinned in .chezmoidata/bd_timew.yaml.
+# bd-timew {{ .bdTimew.version }}
+{{- $v := .bdTimew.version -}}
+{{- $repo := .bdTimew.repo_url -}}
+{{- $cloneDir := joinPath .chezmoi.homeDir .bdTimew.clone_dir }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+REPO_URL={{ $repo | quote }}
+CLONE_DIR={{ $cloneDir | quote }}
+
+if ! command -v pipx >/dev/null 2>&1; then
+  echo "bd-timew installer: pipx not found; install it first" >&2
+  exit 1
+fi
+
+if ! command -v git >/dev/null 2>&1; then
+  echo "bd-timew installer: git not found" >&2
+  exit 1
+fi
+
+# bd-timew requires bd (beads) and timew (Timewarrior) on PATH at runtime.
+# Skip the install if either is missing — the package is useless without them.
+if ! command -v bd >/dev/null 2>&1 || ! command -v timew >/dev/null 2>&1; then
+  echo "bd-timew installer: bd or timew missing from PATH; skipping install" >&2
+  exit 0
+fi
+
+# Idempotency guard: clone is at the right tag AND pipx has it installed.
+if [ -d "$CLONE_DIR/.git" ] \
+    && git -C "$CLONE_DIR" describe --tags --exact-match HEAD 2>/dev/null | grep -qF "v$VERSION" \
+    && pipx list 2>/dev/null | grep -qF "bd-timew"; then
+  echo "bd-timew installer: v$VERSION already installed" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$CLONE_DIR")"
+
+if [ ! -d "$CLONE_DIR/.git" ]; then
+  echo "bd-timew installer: cloning v$VERSION from $REPO_URL" >&2
+  git clone --branch "v$VERSION" --depth 1 "$REPO_URL" "$CLONE_DIR"
+else
+  echo "bd-timew installer: updating clone to v$VERSION" >&2
+  git -C "$CLONE_DIR" fetch --tags
+  git -C "$CLONE_DIR" checkout "v$VERSION"
+fi
+
+if pipx list 2>/dev/null | grep -qF "bd-timew"; then
+  echo "bd-timew installer: reinstalling to pick up dependency changes" >&2
+  pipx reinstall bd-timew
+else
+  echo "bd-timew installer: installing via pipx (editable)" >&2
+  pipx install -e "$CLONE_DIR"
+fi
+
+echo "bd-timew installer: v$VERSION installed" >&2

@@ -1,0 +1,34 @@
+# Pinned bd-timew release, consumed by run_onchange_install-bd-timew.sh.tmpl.
+#
+# bd-timew (https://github.com/AudensAurantius/bd-timew) is a Beads + Timewarrior
+# bridge with project lifecycle management and scoped bead-execution queues.
+# Resolves a Beads issue's labels to an external billing tuple (client, case,
+# svc) via a per-project sidecar (.beads/bd-timew.yaml), then starts/stops a
+# Timewarrior interval tagged accordingly.
+#
+# Installed as `pipx install -e ~/.local/src/bd-timew/` (editable from a local
+# clone). The install script clones the repo at the pinned tag; the editable
+# install means the pipx venv reflects the checkout immediately for pure-code
+# changes. A version bump here triggers git checkout + pipx reinstall (to pick
+# up any new dependencies).
+#
+# Per-project state:
+#   .beads/bd-timew.yaml  — billing tuple resolution (run `bd-timew config init`)
+#   .beads/queue.yaml     — scoped bead-execution queues
+# Global state:
+#   ~/.config/bd-timew/repos.yaml         — registered project list
+#   ~/.cache/bd-timew/cleanup-state.json  — last-cleanup timestamps
+#   ~/.cache/bd-timew/activity-state.json — last-activity for idle-stop
+#
+# Companion: bd (beads) and timew (Timewarrior) must be installed separately;
+# this install script's idempotency guard skips the install if either is missing.
+#
+# To bump:
+#   1. Tag the new release on GitHub (git tag vX.Y.Z && git push --tags)
+#   2. Update version: below (strip the leading "v")
+#   3. chezmoi apply — script re-runs automatically due to changed rendered content
+
+bdTimew:
+  version: "0.1.0"
+  repo_url: "git@github.com:AudensAurantius/bd-timew"
+  clone_dir: ".local/src/bd-timew"
