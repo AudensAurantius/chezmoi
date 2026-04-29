@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Constructs an OpenVPN SCRV1 auth file from pass store credentials.
+# Prints the path to a temp auth file; caller is responsible for shredding it.
+# SCRV1 format: username on line 1, "SCRV1:<b64(password)>:<b64(otp)>" on line 2.
+#
+# Pass entry format (line 1 = password; subsequent lines optional):
+#   <password>
+#   user: mhaynes      # optional; falls back to $VPN_USERNAME if absent
+#   otp: <base32-seed> # optional; script prompts interactively if absent
+#
+# Usage: vpn-auth-helper [--pass-path <path>] [--interactive-otp]
+# Env:   VPN_CREDENTIAL_PATH — default pass path (overridden by --pass-path)
+#        VPN_USERNAME        — fallback username if not found in pass entry
+
+set -euo pipefail
+
+VPN_CREDENTIAL_PATH="${VPN_CREDENTIAL_PATH:-}"
+INTERACTIVE_OTP=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pass-path)       VPN_CREDENTIAL_PATH="$2"; shift 2 ;;
+    --interactive-otp) INTERACTIVE_OTP=true; shift ;;
+    *) echo "vpn-auth-helper: unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+
+[[ -n "$VPN_CREDENTIAL_PATH" ]] || {
+  echo "vpn-auth-helper: no credential path. Set VPN_CREDENTIAL_PATH or pass --pass-path <path>" >&2
+  exit 1
+}
+
+pass_content=$(pass show "$VPN_CREDENTIAL_PATH" 2>/dev/null) || {
+  echo "vpn-auth-helper: cannot read pass entry '$VPN_CREDENTIAL_PATH'" >&2
+  exit 1
+}
+
+password=$(echo "$pass_content" | head -1)
+username=$(echo "$pass_content" | grep '^user:' | cut -d' ' -f2)
+otp_seed=$(echo "$pass_content" | grep '^otp:'  | cut -d' ' -f2)
+
+[[ -n "$password" ]] || { echo "vpn-auth-helper: empty password in $VPN_CREDENTIAL_PATH" >&2; exit 1; }
+
+[[ -n "$username" ]] || username="${VPN_USERNAME:-}"
+[[ -n "$username" ]] || {
+  echo "vpn-auth-helper: username not found. Add 'user: <name>' to $VPN_CREDENTIAL_PATH or set VPN_USERNAME" >&2
+  exit 1
+}
+
+if [[ "$INTERACTIVE_OTP" == true || -z "$otp_seed" ]]; then
+  read -rp "VPN OTP (from Authenticator app): " otp </dev/tty
+  [[ -n "$otp" ]] || { echo "vpn-auth-helper: OTP cannot be empty" >&2; exit 1; }
+else
+  otp=$(oathtool --totp --base32 "$otp_seed")
+fi
+
+b64_pass=$(printf '%s' "$password" | base64 -w 0)
+b64_otp=$(printf '%s' "$otp"      | base64 -w 0)
+
+auth_file=$(mktemp /tmp/vpn-auth-XXXXXX)
+chmod 600 "$auth_file"
+printf '%s\nSCRV1:%s:%s\n' "$username" "$b64_pass" "$b64_otp" > "$auth_file"
+
+echo "$auth_file"

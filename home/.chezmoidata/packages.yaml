@@ -179,6 +179,7 @@ packages:
     - netrik
     - nftables
     - openssl
+    - openvpn
     - pass
     - pass-extension-audit
     - pass-extension-otp
@@ -206,6 +207,7 @@ packages:
     - python3.11-venv
     - ranger
     - readline-common
+    - resolvconf
     - ripgrep
     - rlwrap
     - rofi

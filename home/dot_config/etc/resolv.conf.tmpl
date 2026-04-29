@@ -1,0 +1,12 @@
+{{- if eq .chezmoi.os "linux" -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "wsl") -}}
+# Static resolv.conf — managed by chezmoi (generateResolvConf = false in wsl.conf).
+# 10.255.255.254 = BOCO VPN DNS (reachable only when VPN is active).
+# TODO: once WSL2 namespace VPN is verified, remove 10.255.255.254 and the
+#       options line — BOCO DNS only belongs inside the tunnel at that point.
+nameserver 10.255.255.254
+nameserver 8.8.8.8
+search boldorange.local greatclips.loc
+options timeout:1 attempts:2
+{{- end }}
+{{- end }}

@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Set up a Linux network namespace and start OpenVPN inside it.
+# Must run as root (sudo vpn-connect).
+#
+# One-time setup (not automated — do this once before first use):
+#   mkdir -p ~/.config/openvpn && chmod 700 ~/.config/openvpn
+#   cp /mnt/c/Users/<WindowsUser>/AppData/Roaming/OpenVPN\ Connect/profiles/*.ovpn \
+#      ~/.config/openvpn/boco.ovpn
+#   chmod 600 ~/.config/openvpn/boco.ovpn
+#
+# Usage: sudo vpn-connect [--pass-path <pass-entry>] [--interactive-otp]
+# Env:   VPN_CREDENTIAL_PATH — pass entry path (overridden by --pass-path)
+#        VPN_USERNAME        — fallback OpenVPN username (see vpn-auth-helper)
+#        OVPN_PROFILE        — path to .ovpn profile (default: ~/.config/openvpn/boco.ovpn)
+
+set -euo pipefail
+
+OVPN_PROFILE="${OVPN_PROFILE:-/home/${SUDO_USER:-$USER}/.config/openvpn/boco.ovpn}"
+NS="vpn"
+VETH_HOST="veth-vpn"
+VETH_NS="veth-vpn-br"
+HOST_IP="10.200.0.1"
+NS_IP="10.200.0.2"
+NET="10.200.0.0/24"
+HOST_IF="eth0"
+PIDFILE="/run/vpn-openvpn.pid"
+
+AUTH_HELPER_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pass-path)       AUTH_HELPER_ARGS+=(--pass-path "$2"); shift 2 ;;
+    --interactive-otp) AUTH_HELPER_ARGS+=(--interactive-otp); shift ;;
+    *) echo "vpn-connect: unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+
+[[ "$(id -u)" -eq 0 ]] || { echo "vpn-connect: must run as root (use sudo)" >&2; exit 1; }
+
+if ip netns list | grep -q "^${NS}\b"; then
+  echo "vpn-connect: namespace '$NS' already exists — already connected?" >&2
+  exit 1
+fi
+
+[[ -f "$OVPN_PROFILE" ]] || {
+  echo "vpn-connect: profile not found: $OVPN_PROFILE" >&2
+  echo "  Copy from: /mnt/c/Users/${SUDO_USER:-$USER}/AppData/Roaming/OpenVPN Connect/profiles/*.ovpn" >&2
+  exit 1
+}
+
+echo "Creating network namespace '$NS'..." >&2
+ip netns add "$NS"
+
+cleanup() {
+  echo "vpn-connect: error during setup, cleaning up namespace..." >&2
+  ip netns del "$NS" 2>/dev/null || true
+  ip link del "$VETH_HOST" 2>/dev/null || true
+  iptables -t nat -D POSTROUTING -s "$NET" -o "$HOST_IF" -j MASQUERADE 2>/dev/null || true
+}
+trap cleanup ERR
+
+echo "Creating veth pair..." >&2
+ip link add "$VETH_HOST" type veth peer name "$VETH_NS"
+ip link set "$VETH_NS" netns "$NS"
+
+echo "Configuring interfaces..." >&2
+ip addr add "${HOST_IP}/24" dev "$VETH_HOST"
+ip link set "$VETH_HOST" up
+ip netns exec "$NS" ip addr add "${NS_IP}/24" dev "$VETH_NS"
+ip netns exec "$NS" ip link set "$VETH_NS" up
+ip netns exec "$NS" ip link set lo up
+ip netns exec "$NS" ip route add default via "$HOST_IP"
+
+echo "Enabling IP forwarding and NAT..." >&2
+sysctl -qw net.ipv4.ip_forward=1
+iptables -t nat -A POSTROUTING -s "$NET" -o "$HOST_IF" -j MASQUERADE
+
+echo "Setting up namespace DNS..." >&2
+mkdir -p "/etc/netns/$NS"
+cp /etc/resolv.conf "/etc/netns/$NS/resolv.conf"
+
+echo "Building auth file..." >&2
+INVOKING_USER="${SUDO_USER:-$USER}"
+auth_file=$(sudo -u "$INVOKING_USER" \
+  env VPN_CREDENTIAL_PATH="${VPN_CREDENTIAL_PATH:-}" VPN_USERNAME="${VPN_USERNAME:-}" \
+  vpn-auth-helper "${AUTH_HELPER_ARGS[@]+"${AUTH_HELPER_ARGS[@]}"}")
+chmod 600 "$auth_file"
+
+trap 'shred -u "$auth_file" 2>/dev/null; cleanup 2>/dev/null' ERR
+trap 'shred -u "$auth_file" 2>/dev/null' EXIT
+
+echo "Starting OpenVPN inside namespace '$NS'..." >&2
+ip netns exec "$NS" openvpn \
+  --config "$OVPN_PROFILE" \
+  --auth-user-pass "$auth_file" \
+  --script-security 2 \
+  --up /etc/openvpn/update-resolv-conf \
+  --down /etc/openvpn/update-resolv-conf \
+  --writepid "$PIDFILE" \
+  --daemon
+
+trap 'shred -u "$auth_file" 2>/dev/null' EXIT
+
+echo "VPN connected. Use 'vpn-exec <cmd>' to run commands through the tunnel." >&2
+echo "Use 'sudo vpn-disconnect' to tear down." >&2

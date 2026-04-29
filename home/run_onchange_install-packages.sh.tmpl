@@ -1,15 +1,42 @@
 #!/bin/bash
 # hash: {{ include (joinPath ".chezmoidata" "packages.yaml") | sha256sum }}
-echo "Package list change detected!" >&2
-{{ if .chezmoi.osRelease.name | hasPrefix "Debian" -}}
-echo "Installing Debian packages..." >&2
-declare -a failed=()
-{{ range .packages.debian -}}
-sudo apt-get install -qq -y {{ . | quote }} 2>&1 || failed+=( {{ . | quote }} )
-{{ end -}}
-if [[ ${#failed[@]} -gt 0 ]]; then
-  echo "Failed to install:"
-  printf '  %s\n' "${failed[@]}"
+set -euo pipefail
+
+DISTRO="{{ .chezmoi.osRelease.id }}"
+PACKAGES_YAML="{{ joinPath .chezmoi.sourceDir ".chezmoidata" "packages.yaml" }}"
+
+if ! yq -r ".packages.${DISTRO} | length" "$PACKAGES_YAML" 2>/dev/null | grep -qv '^0$'; then
+  echo "install-packages: no packages.${DISTRO} section in $PACKAGES_YAML — skipping" >&2
+  exit 0
+fi
+
+# TODO: add elif branches here for other distros (dnf for Fedora/RHEL, brew for macOS, etc.)
+if ! command -v dpkg-query &>/dev/null || ! command -v apt-get &>/dev/null; then
+  echo "install-packages: dpkg/apt not found — add a handler for distro '${DISTRO}'" >&2
   exit 1
-fi >&2
-{{ end -}}
+fi
+
+echo "Checking package status for distro '${DISTRO}'..." >&2
+mapfile -t wanted < <(yq -r ".packages.${DISTRO}[]" "$PACKAGES_YAML")
+
+mapfile -t installed < <(
+  dpkg-query -W -f='${db:Status-Abbrev}${Package}\n' "${wanted[@]}" 2>/dev/null \
+  | grep '^ii' | sed 's/^ii\s*//' || true
+)
+
+declare -A inst_set
+for p in "${installed[@]}"; do inst_set[$p]=1; done
+
+to_install=()
+for p in "${wanted[@]}"; do
+  [[ -v inst_set[$p] ]] || to_install+=("$p")
+done
+
+if [[ ${#to_install[@]} -eq 0 ]]; then
+  echo "All ${#wanted[@]} packages already installed." >&2
+  exit 0
+fi
+
+echo "Installing ${#to_install[@]} new package(s):" >&2
+printf '  %s\n' "${to_install[@]}" >&2
+sudo apt-get install -qq -y "${to_install[@]}"
