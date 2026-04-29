@@ -7,5 +7,8 @@ chezmoi execute-template < {{ joinPath .chezmoi.sourceDir "dot_config" "etc" "ws
 echo "Syncing resolv.conf to /etc/..." >&2
 chezmoi execute-template < {{ joinPath .chezmoi.sourceDir "dot_config" "etc" "resolv.conf.tmpl" | quote }} | sudo tee /etc/resolv.conf > /dev/null
 echo "Applied wsl.conf + resolv.conf. Run 'wsl --shutdown' from Windows to activate wsl.conf changes."
+if command -v etckeeper &>/dev/null; then
+  sudo etckeeper commit "chezmoi: apply wsl.conf and resolv.conf" || true
+fi
 {{- end }}
 {{- end }}
