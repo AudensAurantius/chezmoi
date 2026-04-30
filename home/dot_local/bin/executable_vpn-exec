@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Run a single command inside the protected namespace.
+#
+# Usage: vpn-exec <command> [args...]
+# Example: vpn-exec curl https://internal.corp/health
+#
+# Requires `sudo vpn-connect` to have been run first.
+
+set -euo pipefail
+
+usage() { sed -n '2,/^$/p' "$0" | sed 's/^# \?//'; }
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
+
+NS="protected"
+[[ $# -gt 0 ]] || { usage >&2; exit 1; }
+ip netns list 2>/dev/null | grep -q "^${NS}\b" || {
+  echo "vpn-exec: namespace '$NS' not found — run 'sudo -E vpn-connect' first" >&2
+  exit 1
+}
+
+exec sudo ip netns exec "$NS" sudo -u "$USER" "$@"

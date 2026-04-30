@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Construct an OpenVPN auth file from VPN_USERNAME / VPN_PASSWORD env vars.
+# Prints the path to a temp auth file; caller is responsible for shredding.
+#
+# When the .ovpn profile contains a static-challenge directive (MFA),
+# OpenVPN itself prompts on /dev/tty for the OTP — this helper does NOT
+# pre-bake the OTP into a SCRV1 string. OpenVPN 2.6+ ignores SCRV1 in
+# auth files anyway, so pre-baking would just produce a duplicate prompt
+# and a TOTP single-use replay collision on the server.
+#
+# Usage: vpn-auth-helper [-h|--help]
+# Env:   VPN_USERNAME — OpenVPN username (required)
+#        VPN_PASSWORD — OpenVPN password (required)
+
+set -euo pipefail
+
+usage() { sed -n '2,/^$/p' "$0" | sed 's/^# \?//'; }
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
+
+[[ -n "${VPN_USERNAME:-}" ]] || { echo "vpn-auth-helper: VPN_USERNAME is not set" >&2; exit 1; }
+[[ -n "${VPN_PASSWORD:-}" ]] || { echo "vpn-auth-helper: VPN_PASSWORD is not set" >&2; exit 1; }
+
+auth_file=$(mktemp /tmp/vpn-auth-XXXXXX)
+chmod 600 "$auth_file"
+printf '%s\n%s\n' "$VPN_USERNAME" "$VPN_PASSWORD" > "$auth_file"
+
+echo "$auth_file"

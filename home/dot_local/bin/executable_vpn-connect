@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Set up a namespace-isolated OpenVPN tunnel via namespaced-openvpn.
+# Must run as root (sudo -E vpn-connect).
+#
+# Usage: sudo -E vpn-connect [extra namespaced-openvpn args]
+# Env:   OVPN_PROFILE — path to .ovpn profile (required)
+#        VPN_USERNAME — OpenVPN username (required)
+#        VPN_PASSWORD — OpenVPN password (required)
+#
+# When the profile contains a static-challenge directive (MFA), OpenVPN
+# prompts on the terminal for the OTP — type the code from your
+# Authenticator app when asked. The helper does not pre-bake the OTP
+# (see vpn-auth-helper(1) header for rationale).
+#
+# The protected namespace is named 'protected' (namespaced-openvpn
+# default). Use vpn-shell or vpn-exec to access it.
+
+set -euo pipefail
+
+usage() { sed -n '2,/^$/p' "$0" | sed 's/^# \?//'; }
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
+
+[[ "$(id -u)" -eq 0 ]] || { echo "vpn-connect: must run as root (sudo -E)" >&2; exit 1; }
+[[ -n "${OVPN_PROFILE:-}" ]] || { echo "vpn-connect: OVPN_PROFILE is not set" >&2; exit 1; }
+[[ -f "$OVPN_PROFILE" ]] || { echo "vpn-connect: profile not found: $OVPN_PROFILE" >&2; exit 1; }
+
+command -v namespaced-openvpn >/dev/null 2>&1 || {
+  echo "vpn-connect: namespaced-openvpn not in PATH; run 'chezmoi apply'" >&2
+  exit 1
+}
+
+# Resolve vpn-auth-helper from the invoking user's PATH (the wrapper is
+# installed under ~/.local/bin via chezmoi, which sudo's secure_path may
+# not include).
+INVOKING_USER="${SUDO_USER:-$USER}"
+INVOKING_HOME=$(getent passwd "$INVOKING_USER" | cut -d: -f6)
+AUTH_HELPER="$INVOKING_HOME/.local/bin/vpn-auth-helper"
+[[ -x "$AUTH_HELPER" ]] || { echo "vpn-connect: $AUTH_HELPER not found" >&2; exit 1; }
+
+# Build the auth file. VPN_USERNAME / VPN_PASSWORD reach the helper via
+# sudo -E's environment-preservation; the helper writes a chmod 600
+# tempfile and prints its path.
+auth_file=$("$AUTH_HELPER")
+trap 'shred -u "$auth_file" 2>/dev/null || true' EXIT
+
+# Hand off to namespaced-openvpn. --auth-retry interact lets OpenVPN
+# re-prompt on a typoed OTP rather than dying. --daemon backgrounds
+# OpenVPN after initial setup; the auth file is shredded once this
+# script exits, by which time OpenVPN has already read it.
+namespaced-openvpn \
+  --config "$OVPN_PROFILE" \
+  --auth-user-pass "$auth_file" \
+  --auth-retry interact \
+  --daemon \
+  "$@"
+
+echo "VPN connected. Use 'vpn-exec <cmd>' or 'vpn-shell' to access the tunnel." >&2
+echo "Use 'sudo vpn-disconnect' to tear down." >&2

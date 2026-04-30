@@ -1,0 +1,32 @@
+{{- if eq .chezmoi.os "linux" -}}
+#!/bin/sh
+# hash:
+#   {{ include "dot_local/bin/executable_vpn-connect" | sha256sum }}
+#   {{ include "dot_local/bin/executable_vpn-disconnect" | sha256sum }}
+#   {{ include "dot_local/bin/executable_vpn-shell" | sha256sum }}
+#   {{ include "dot_local/bin/executable_vpn-exec" | sha256sum }}
+#   {{ include "dot_local/bin/executable_vpn-auth-helper" | sha256sum }}
+#
+# Symlink the chezmoi-managed vpn-* wrappers from ~/.local/bin into
+# /usr/local/bin so they're discoverable via sudo's secure_path. Without
+# the symlinks, users would have to invoke `sudo -E ~/.local/bin/vpn-connect`
+# with the full path. The actual scripts remain chezmoi-managed at the
+# source location; the symlinks always point at the up-to-date version.
+#
+# `after_install` prefix sequences this AFTER the wrappers have been
+# applied to ~/.local/bin/.
+set -eu
+
+SRC_DIR="{{ .chezmoi.homeDir }}/.local/bin"
+DST_DIR="/usr/local/bin"
+
+for tool in vpn-connect vpn-disconnect vpn-shell vpn-exec vpn-auth-helper; do
+  if [ ! -x "$SRC_DIR/$tool" ]; then
+    echo "vpn-symlinks: source not found: $SRC_DIR/$tool — skipping" >&2
+    continue
+  fi
+  sudo ln -sf "$SRC_DIR/$tool" "$DST_DIR/$tool"
+done
+
+echo "vpn-symlinks: linked vpn-* into $DST_DIR" >&2
+{{- end }}

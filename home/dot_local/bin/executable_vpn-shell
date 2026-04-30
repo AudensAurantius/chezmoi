@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Launch the user's $SHELL inside the protected namespace as an
+# interactive login shell. All rc files (.zshenv/.zprofile/.zshrc/.zlogin
+# for zsh; .bash_profile/.bashrc for bash) are sourced normally.
+#
+# Usage: vpn-shell [-h|--help]
+#
+# Requires `sudo vpn-connect` to have been run first.
+# Exit the shell to return to the host network.
+
+set -euo pipefail
+
+usage() { sed -n '2,/^$/p' "$0" | sed 's/^# \?//'; }
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
+
+NS="protected"
+ip netns list 2>/dev/null | grep -q "^${NS}\b" || {
+  echo "vpn-shell: namespace '$NS' not found — run 'sudo -E vpn-connect' first" >&2
+  exit 1
+}
+
+[[ -n "${SHELL:-}" ]] || { echo "vpn-shell: \$SHELL is not set" >&2; exit 1; }
+
+exec sudo ip netns exec "$NS" sudo -u "$USER" "$SHELL" -i -l

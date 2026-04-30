@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Tear down the namespaced-openvpn tunnel.
+# Must run as root (sudo vpn-disconnect).
+#
+# Kills any openvpn process whose command line references the protected
+# namespace, deletes the namespace, and shreds any leftover auth files.
+
+set -euo pipefail
+
+usage() { sed -n '2,/^$/p' "$0" | sed 's/^# \?//'; }
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
+
+[[ "$(id -u)" -eq 0 ]] || { echo "vpn-disconnect: must run as root (sudo)" >&2; exit 1; }
+
+NS="protected"
+errors=0
+
+# Kill openvpn processes associated with the namespace. namespaced-openvpn
+# launches openvpn from the root namespace but the tun interface is in
+# the protected ns; we identify them via the --config flag in the cmdline.
+if pgrep -af 'openvpn.*--config' >/dev/null 2>&1; then
+  echo "Stopping OpenVPN processes..." >&2
+  pkill -f 'openvpn.*--config' || { echo "vpn-disconnect: pkill returned non-zero" >&2; errors=1; }
+  sleep 1
+fi
+
+if ip netns list 2>/dev/null | grep -q "^${NS}\b"; then
+  echo "Deleting namespace '$NS'..." >&2
+  ip netns del "$NS" || { echo "vpn-disconnect: failed to delete namespace" >&2; errors=1; }
+else
+  echo "vpn-disconnect: namespace '$NS' not found — already torn down?" >&2
+fi
+
+shred -u /tmp/vpn-auth-* 2>/dev/null || true
+
+if [[ $errors -eq 0 ]]; then
+  echo "VPN disconnected." >&2
+else
+  echo "vpn-disconnect: completed with errors (see above)." >&2
+  exit 1
+fi

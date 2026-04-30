@@ -1,0 +1,45 @@
+#!/bin/sh
+# run_onchange_install-namespaced-openvpn.sh.tmpl
+#
+# Clone namespaced-openvpn from GitHub at the pinned commit and install
+# via `sudo make install` (default PREFIX=/usr/local).
+#
+# Version pinned in .chezmoidata/namespaced_openvpn.yaml.
+# namespaced-openvpn {{ .namespacedOpenvpn.version }}
+{{- $v := .namespacedOpenvpn.version -}}
+{{- $repo := .namespacedOpenvpn.repo_url -}}
+{{- $cloneDir := joinPath .chezmoi.homeDir .namespacedOpenvpn.clone_dir }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+REPO_URL={{ $repo | quote }}
+CLONE_DIR={{ $cloneDir | quote }}
+
+if ! command -v git >/dev/null 2>&1; then
+  echo "namespaced-openvpn installer: git not found" >&2
+  exit 1
+fi
+
+# namespaced-openvpn requires openvpn at runtime; skip the install if missing.
+if ! command -v openvpn >/dev/null 2>&1; then
+  echo "namespaced-openvpn installer: openvpn missing from PATH; skipping install" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$CLONE_DIR")"
+
+if [ ! -d "$CLONE_DIR/.git" ]; then
+  echo "namespaced-openvpn installer: cloning $VERSION from $REPO_URL" >&2
+  git clone "$REPO_URL" "$CLONE_DIR"
+  git -C "$CLONE_DIR" checkout "$VERSION"
+else
+  echo "namespaced-openvpn installer: updating clone to $VERSION" >&2
+  git -C "$CLONE_DIR" fetch origin
+  git -C "$CLONE_DIR" checkout "$VERSION"
+fi
+
+echo "namespaced-openvpn installer: running 'sudo make install'" >&2
+sudo make -C "$CLONE_DIR" install
+
+echo "namespaced-openvpn installer: $VERSION installed" >&2

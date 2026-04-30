@@ -1,0 +1,34 @@
+# Pinned namespaced-openvpn release, consumed by
+# run_onchange_install-namespaced-openvpn.sh.tmpl.
+#
+# namespaced-openvpn (https://github.com/slingamn/namespaced-openvpn) is a
+# Python wrapper around OpenVPN that runs the daemon in the root network
+# namespace and transfers only the tun interface into a protected
+# namespace, providing systematic mitigation for VPN deanonymization
+# leaks (route injection, Port Fail, asymmetric routing, IPv6, DNS).
+#
+# Pinned to a commit hash because the upstream has no release tags; the
+# code has been stable since 2020 (active commits stopped). Bump the
+# `version:` value to a newer commit hash to update.
+#
+# Installed via `sudo make install` (default PREFIX=/usr/local). The
+# install script clones the repo at the pinned commit then invokes make.
+#
+# Per-user state (NOT managed by chezmoi — secrets):
+#   ~/.config/openvpn/<name>.ovpn  — your provider's profile (chmod 600)
+# Per-shell environment (set in your rc file or .envrc):
+#   OVPN_PROFILE   — path to .ovpn file
+#   VPN_USERNAME   — OpenVPN username
+#   VPN_PASSWORD   — OpenVPN password (e.g. from `pass`)
+#
+# Companion: openvpn must be installed separately; the install script's
+# idempotency guard skips if openvpn is missing.
+#
+# The vpn-connect / vpn-disconnect / vpn-exec / vpn-shell / vpn-auth-helper
+# wrappers (under home/dot_local/bin/executable_vpn-*) are thin shims
+# that orchestrate around namespaced-openvpn.
+
+namespacedOpenvpn:
+  version: "a3fa42b2d864"  # commit hash; no tags upstream
+  repo_url: "https://github.com/slingamn/namespaced-openvpn"
+  clone_dir: ".local/src/namespaced-openvpn"
