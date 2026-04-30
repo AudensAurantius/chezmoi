@@ -1,0 +1,53 @@
+#!/bin/sh
+# run_onchange_install-wsl-vpn-namespace.sh.tmpl
+#
+# Clone wsl-vpn-namespace from GitHub at the pinned tag and install via
+# `sudo make install` (default PREFIX=/usr/local). A version bump triggers
+# a re-checkout and reinstall.
+#
+# Version pinned in .chezmoidata/wsl_vpn_namespace.yaml.
+# wsl-vpn-namespace {{ .wslVpnNamespace.version }}
+{{- $v := .wslVpnNamespace.version -}}
+{{- $repo := .wslVpnNamespace.repo_url -}}
+{{- $cloneDir := joinPath .chezmoi.homeDir .wslVpnNamespace.clone_dir }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+REPO_URL={{ $repo | quote }}
+CLONE_DIR={{ $cloneDir | quote }}
+
+if ! command -v git >/dev/null 2>&1; then
+  echo "wsl-vpn-namespace installer: git not found" >&2
+  exit 1
+fi
+
+# wsl-vpn-namespace requires openvpn at runtime; skip the install if missing.
+if ! command -v openvpn >/dev/null 2>&1; then
+  echo "wsl-vpn-namespace installer: openvpn missing from PATH; skipping install" >&2
+  exit 0
+fi
+
+# Idempotency guard: clone is at the right tag AND scripts are present.
+if [ -d "$CLONE_DIR/.git" ] \
+    && git -C "$CLONE_DIR" describe --tags --exact-match HEAD 2>/dev/null | grep -qF "v$VERSION" \
+    && command -v vpn-connect >/dev/null 2>&1; then
+  echo "wsl-vpn-namespace installer: v$VERSION already installed" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$CLONE_DIR")"
+
+if [ ! -d "$CLONE_DIR/.git" ]; then
+  echo "wsl-vpn-namespace installer: cloning v$VERSION from $REPO_URL" >&2
+  git clone --branch "v$VERSION" --depth 1 "$REPO_URL" "$CLONE_DIR"
+else
+  echo "wsl-vpn-namespace installer: updating clone to v$VERSION" >&2
+  git -C "$CLONE_DIR" fetch --tags
+  git -C "$CLONE_DIR" checkout "v$VERSION"
+fi
+
+echo "wsl-vpn-namespace installer: running 'sudo make install'" >&2
+sudo make -C "$CLONE_DIR" install
+
+echo "wsl-vpn-namespace installer: v$VERSION installed" >&2

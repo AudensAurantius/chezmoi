@@ -1,0 +1,33 @@
+# Pinned wsl-vpn-namespace release, consumed by
+# run_onchange_install-wsl-vpn-namespace.sh.tmpl.
+#
+# wsl-vpn-namespace (https://github.com/AudensAurantius/wsl-vpn-namespace)
+# provides namespace-isolated OpenVPN tunneling for WSL2: only commands
+# explicitly invoked via `vpn-exec` traverse the tunnel, while everyday
+# WSL2 traffic stays on the host network. Avoids Windows VPN client
+# all-or-nothing routing and the WSL2↔Windows DNS race.
+#
+# Installed via `sudo make install` (default PREFIX=/usr/local). The
+# install script clones the repo at the pinned tag, then invokes make.
+# Bumping `version:` here triggers a re-checkout and reinstall.
+#
+# Per-user state (NOT managed by chezmoi — secrets):
+#   ~/.config/openvpn/<name>.ovpn  — your provider's profile (chmod 600)
+# Per-shell environment (set in your rc file or .envrc):
+#   OVPN_PROFILE   — path to .ovpn file
+#   VPN_USERNAME   — OpenVPN username
+#   VPN_PASSWORD   — OpenVPN password (e.g. from `pass`)
+#   VPN_TOTP_SEED  — base32 TOTP seed (optional; prompts interactively if absent)
+#
+# Companion: openvpn and oathtool must be installed separately;
+# the install script's idempotency guard skips if openvpn is missing.
+#
+# To bump:
+#   1. Tag the new release on GitHub (git tag vX.Y.Z && git push --tags)
+#   2. Update version: below (strip the leading "v")
+#   3. chezmoi apply — script re-runs automatically due to changed rendered content
+
+wslVpnNamespace:
+  version: "0.1.1"
+  repo_url: "git@github.com:AudensAurantius/wsl-vpn-namespace"
+  clone_dir: ".local/src/wsl-vpn-namespace"
