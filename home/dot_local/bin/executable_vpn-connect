@@ -81,21 +81,27 @@ cp /etc/resolv.conf "/etc/netns/$NS/resolv.conf"
 
 echo "Building auth file..." >&2
 INVOKING_USER="${SUDO_USER:-$USER}"
+INVOKING_HOME=$(getent passwd "$INVOKING_USER" | cut -d: -f6)
 auth_file=$(sudo -u "$INVOKING_USER" \
-  env VPN_CREDENTIAL_PATH="${VPN_CREDENTIAL_PATH:-}" VPN_USERNAME="${VPN_USERNAME:-}" \
+  env PATH="${INVOKING_HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin" \
+      VPN_CREDENTIAL_PATH="${VPN_CREDENTIAL_PATH:-}" \
+      VPN_USERNAME="${VPN_USERNAME:-}" \
   vpn-auth-helper "${AUTH_HELPER_ARGS[@]+"${AUTH_HELPER_ARGS[@]}"}")
 chmod 600 "$auth_file"
 
 trap 'shred -u "$auth_file" 2>/dev/null; cleanup 2>/dev/null' ERR
 trap 'shred -u "$auth_file" 2>/dev/null' EXIT
 
+VPN_NS_DNS="${INVOKING_HOME}/.local/bin/vpn-ns-dns"
+[[ -x "$VPN_NS_DNS" ]] || { echo "vpn-connect: vpn-ns-dns not found at $VPN_NS_DNS" >&2; exit 1; }
+
 echo "Starting OpenVPN inside namespace '$NS'..." >&2
 ip netns exec "$NS" openvpn \
   --config "$OVPN_PROFILE" \
   --auth-user-pass "$auth_file" \
   --script-security 2 \
-  --up /etc/openvpn/update-resolv-conf \
-  --down /etc/openvpn/update-resolv-conf \
+  --up "$VPN_NS_DNS" \
+  --down "$VPN_NS_DNS" \
   --writepid "$PIDFILE" \
   --daemon
 
