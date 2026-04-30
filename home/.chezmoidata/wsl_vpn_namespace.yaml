@@ -28,6 +28,6 @@
 #   3. chezmoi apply — script re-runs automatically due to changed rendered content
 
 wslVpnNamespace:
-  version: "0.1.1"
+  version: "0.2.0"
   repo_url: "git@github.com:AudensAurantius/wsl-vpn-namespace"
   clone_dir: ".local/src/wsl-vpn-namespace"

@@ -212,6 +212,7 @@ packages:
     - rofi
     - rofi-dev
     - scdaemon
+    - scdoc
     - sed
     - sensible-utils
     - shellex

@@ -28,13 +28,12 @@ if ! command -v openvpn >/dev/null 2>&1; then
   exit 0
 fi
 
-# Idempotency guard: clone is at the right tag AND scripts are present.
-if [ -d "$CLONE_DIR/.git" ] \
-    && git -C "$CLONE_DIR" describe --tags --exact-match HEAD 2>/dev/null | grep -qF "v$VERSION" \
-    && command -v vpn-connect >/dev/null 2>&1; then
-  echo "wsl-vpn-namespace installer: v$VERSION already installed" >&2
-  exit 0
-fi
+# Note: no early-exit idempotency check. chezmoi's run_onchange mechanism
+# only invokes this script when the rendered content (i.e. the pinned
+# version) changes, so re-running git fetch/checkout and `make install`
+# unconditionally is correct — both operations are fast and idempotent,
+# and skipping based on `command -v vpn-connect` alone misses the case
+# where the local clone is ahead of the installed binaries.
 
 mkdir -p "$(dirname "$CLONE_DIR")"
 
