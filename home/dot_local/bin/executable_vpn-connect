@@ -82,8 +82,12 @@ cp /etc/resolv.conf "/etc/netns/$NS/resolv.conf"
 echo "Building auth file..." >&2
 INVOKING_USER="${SUDO_USER:-$USER}"
 INVOKING_HOME=$(getent passwd "$INVOKING_USER" | cut -d: -f6)
+INVOKING_UID=$(id -u "$INVOKING_USER")
 auth_file=$(sudo -u "$INVOKING_USER" \
   env PATH="${INVOKING_HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin" \
+      HOME="$INVOKING_HOME" \
+      XDG_RUNTIME_DIR="/run/user/${INVOKING_UID}" \
+      PASSWORD_STORE_DIR="${PASSWORD_STORE_DIR:-${INVOKING_HOME}/.password-store}" \
       VPN_CREDENTIAL_PATH="${VPN_CREDENTIAL_PATH:-}" \
       VPN_USERNAME="${VPN_USERNAME:-}" \
   vpn-auth-helper "${AUTH_HELPER_ARGS[@]+"${AUTH_HELPER_ARGS[@]}"}")
