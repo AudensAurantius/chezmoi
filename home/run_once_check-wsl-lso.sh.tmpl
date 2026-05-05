@@ -1,0 +1,98 @@
+#!/bin/sh
+# run_once_check-wsl-lso.sh.tmpl
+#
+# Verify that Large Send Offload (LSO) is disabled on the WSL2 vEthernet
+# adapter. WSL2's LSOv2 interaction with the Hyper-V virtual switch is
+# broken in a way that stalls long-running TCP sends — symptoms include
+# `dolt push` hanging with no network throughput, `git push` to GitHub
+# stalling on the upload-pack phase, etc.
+#
+# This script is read-only / advisory: it CHECKS the LSO state via
+# PowerShell and records the result in a sentinel file. It does NOT
+# modify the registry. The actual disable requires Administrator
+# PowerShell, which would prompt UAC and break unattended apply:
+#
+#     Disable-NetAdapterLso -Name "vEthernet (WSL*)" -IPv4 -IPv6
+#
+# Full context: docs/wsl2-setup.md
+#
+# Re-run after Windows Updates that may have reset the setting:
+#     chezmoi state delete-bucket --bucket=scriptState && chezmoi apply
+
+set -eu
+
+# Skip cleanly on non-WSL2 platforms (macOS, native Linux, native Windows
+# applying via something exotic). The check is a no-op there.
+if ! grep -qi microsoft /proc/version 2>/dev/null; then
+  exit 0
+fi
+
+# Skip cleanly if powershell.exe isn't on the WSL PATH (some minimal WSL
+# setups don't auto-add it). User will see the warning in docs/.
+if ! command -v powershell.exe >/dev/null 2>&1; then
+  echo "wsl-lso-check: powershell.exe not on PATH; skipping" >&2
+  exit 0
+fi
+
+SENTINEL_DIR="$HOME/.cache/chezmoi-sentinels"
+SENTINEL="$SENTINEL_DIR/wsl-lso-disabled"
+mkdir -p "$SENTINEL_DIR"
+
+# Query LSO state. Returns JSON with IPv4Enabled / IPv6Enabled booleans.
+# `2>$null` suppresses the "no adapter" error in case the adapter name
+# changes in a future WSL release.
+LSO_JSON=$(powershell.exe -NoProfile -Command \
+  'Get-NetAdapterLso -Name "vEthernet (WSL*)" 2>$null | ConvertTo-Json -Compress' \
+  2>/dev/null | tr -d '\r' | head -c 4096)
+
+if [ -z "$LSO_JSON" ]; then
+  echo "wsl-lso-check: could not query NetAdapter LSO state — adapter naming may have changed." >&2
+  echo "wsl-lso-check: see docs/wsl2-setup.md for manual verification." >&2
+  exit 0
+fi
+
+# Both IPv4 and IPv6 LSO must be disabled. Match the JSON regardless of
+# field ordering.
+case "$LSO_JSON" in
+  *'"IPv4Enabled":false'*'"IPv6Enabled":false'*|*'"IPv6Enabled":false'*'"IPv4Enabled":false'*)
+    cat >"$SENTINEL" <<EOF
+status: disabled
+detected_at: $(date -Iseconds)
+adapter_pattern: vEthernet (WSL*)
+verified_via: powershell.exe Get-NetAdapterLso
+EOF
+    echo "wsl-lso-check: LSO is disabled on the WSL adapter — sentinel written to $SENTINEL"
+    ;;
+  *)
+    cat >&2 <<'WARN'
+
+================================================================================
+wsl-lso-check: WARNING — Large Send Offload is still ENABLED on the WSL adapter.
+
+This breaks long-running TCP sends from WSL — `git push`, `dolt push`,
+`bd dolt push`, `rsync`, `scp` will appear to hang with no network throughput.
+
+To fix, open an *Administrator* PowerShell on the Windows host and run:
+
+    Disable-NetAdapterLso -Name "vEthernet (WSL*)" -IPv4 -IPv6
+    Get-NetAdapterLso -Name "vEthernet (WSL*)"   # confirm IPv4Enabled/IPv6Enabled = False
+
+The setting is registry-persistent across reboots. Full context:
+docs/wsl2-setup.md.
+
+After fixing, force a re-check:
+
+    chezmoi state delete-bucket --bucket=scriptState && chezmoi apply
+
+================================================================================
+WARN
+    cat >"$SENTINEL" <<EOF
+status: enabled-needs-manual-disable
+detected_at: $(date -Iseconds)
+adapter_pattern: vEthernet (WSL*)
+mitigation: Disable-NetAdapterLso -Name "vEthernet (WSL*)" -IPv4 -IPv6 (admin PS)
+EOF
+    # Exit 0 — don't break apply for unrelated work. The warning is loud
+    # enough to be noticed; sentinel records the state for inspection.
+    ;;
+esac

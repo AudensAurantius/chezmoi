@@ -60,6 +60,10 @@ _Add your build and test commands here_
 # npm test
 ```
 
+## Platform-specific setup
+
+- **WSL2**: see [`docs/wsl2-setup.md`](docs/wsl2-setup.md) — required Windows-side configuration including the LSO disable that prevents `git push` / `dolt push` stalls. `home/run_once_check-wsl-lso.sh.tmpl` verifies the setting on each fresh apply and writes a sentinel at `~/.cache/chezmoi-sentinels/wsl-lso-disabled`.
+
 ## Architecture Overview
 
 _Add a brief overview of your project architecture_
