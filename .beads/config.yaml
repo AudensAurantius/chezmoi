@@ -52,3 +52,8 @@
 # - linear.api-key
 # - github.org
 # - github.repo
+dolt.auto-push: false
+
+dolt.auto-commit: "batch"
+
+backup.git-push: false
