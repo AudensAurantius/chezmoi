@@ -34,26 +34,49 @@ discovery falls back to the IPv6 minimum (1280 bytes) and the connection
 appears alive but transmits nothing.
 
 This is documented across multiple WSL GitHub issues; the canonical
-mitigation is to disable LSOv2 on the WSL adapter so the kernel does the
-segmentation itself.
+mitigation is to disable LSOv2 so the kernel does the segmentation
+itself.
+
+### Critical: disable on BOTH the virtual AND physical adapters
+
+WSL traffic egresses through the `vEthernet (WSL ...)` adapter AND then
+through the physical NIC (e.g., `Ethernet 7`, `Ethernet`, `Wi-Fi`).
+**LSO must be disabled on both** — a broken offload on either one
+poisons the connection. Disabling only the virtual adapter reduces the
+stall but does not eliminate it; verified empirically 2026-05-05 (dolt
+push still hit retransmit storm with `bytes_retrans/bytes_sent ≈ 59%`
+until the physical adapter's LSO was also disabled).
 
 ### One-time fix (Administrator PowerShell)
 
 ```powershell
-# Verify current state (should report Enabled before fix)
-Get-NetAdapterAdvancedProperty -Name "vEthernet (WSL*)" -DisplayName "*Large*"
+# 1. Identify your physical adapter(s) — the non-virtual ones
+Get-NetAdapter | Where-Object Virtual -eq $false |
+  Select Name, InterfaceDescription, Status
 
-# Disable LSO v2 on both IPv4 and IPv6
+# 2. Verify current LSO state across all adapters
+Get-NetAdapterLso
+
+# 3. Disable LSO on the WSL virtual adapter
 Disable-NetAdapterLso -Name "vEthernet (WSL*)" -IPv4 -IPv6
 
-# Confirm
-Get-NetAdapterLso -Name "vEthernet (WSL*)"
-# Expected: V1IPv4Enabled=False, IPv4Enabled=False, IPv6Enabled=False
+# 4. Disable LSO on the physical adapter(s) carrying outbound traffic.
+#    Substitute the actual name(s) from step 1.
+Disable-NetAdapterLso -Name "Ethernet 7" -IPv4 -IPv6
+# If you also use Wi-Fi:
+# Disable-NetAdapterLso -Name "Wi-Fi" -IPv4 -IPv6
+
+# 5. Confirm — every adapter you use should report all False
+Get-NetAdapterLso
 ```
 
-The setting is registry-persistent and survives `wsl --shutdown` and
-Windows reboots. **Verify after major Windows feature updates** —
-networking stack resets have been observed.
+The settings are registry-persistent per adapter and survive
+`wsl --shutdown` and Windows reboots. **Verify after major Windows
+feature updates** — networking stack resets have been observed.
+
+If you switch between Ethernet and Wi-Fi (e.g., dock vs. mobile), make
+sure LSO is disabled on every physical adapter you use, not just the
+currently-active one.
 
 ### Why a GUI walk-through doesn't work
 

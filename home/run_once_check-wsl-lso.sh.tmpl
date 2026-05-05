@@ -1,11 +1,17 @@
 #!/bin/sh
 # run_once_check-wsl-lso.sh.tmpl
 #
-# Verify that Large Send Offload (LSO) is disabled on the WSL2 vEthernet
-# adapter. WSL2's LSOv2 interaction with the Hyper-V virtual switch is
-# broken in a way that stalls long-running TCP sends — symptoms include
-# `dolt push` hanging with no network throughput, `git push` to GitHub
-# stalling on the upload-pack phase, etc.
+# Verify that Large Send Offload (LSO) is disabled on every adapter that
+# carries WSL2 outbound traffic — both the `vEthernet (WSL ...)` virtual
+# adapter AND the physical NIC(s) (Ethernet, Wi-Fi).
+#
+# WSL2's LSOv2 interaction with the Hyper-V virtual switch and certain
+# physical NIC drivers is broken in a way that stalls long-running TCP
+# sends — symptoms include `dolt push` hanging with no network throughput,
+# `git push` to GitHub stalling on the upload-pack phase, etc. Disabling
+# LSO on only the virtual adapter is NOT sufficient; traffic egresses
+# through both adapters in succession and a broken offload on either
+# poisons the connection.
 #
 # This script is read-only / advisory: it CHECKS the LSO state via
 # PowerShell and records the result in a sentinel file. It does NOT
@@ -13,6 +19,7 @@
 # PowerShell, which would prompt UAC and break unattended apply:
 #
 #     Disable-NetAdapterLso -Name "vEthernet (WSL*)" -IPv4 -IPv6
+#     Disable-NetAdapterLso -Name "<Physical Adapter Name>" -IPv4 -IPv6
 #
 # Full context: docs/wsl2-setup.md
 #
@@ -38,46 +45,118 @@ SENTINEL_DIR="$HOME/.cache/chezmoi-sentinels"
 SENTINEL="$SENTINEL_DIR/wsl-lso-disabled"
 mkdir -p "$SENTINEL_DIR"
 
-# Query LSO state. Returns JSON with IPv4Enabled / IPv6Enabled booleans.
-# `2>$null` suppresses the "no adapter" error in case the adapter name
-# changes in a future WSL release.
-LSO_JSON=$(powershell.exe -NoProfile -Command \
-  'Get-NetAdapterLso -Name "vEthernet (WSL*)" 2>$null | ConvertTo-Json -Compress' \
-  2>/dev/null | tr -d '\r' | head -c 4096)
+# Enumerate every NetAdapter (virtual + physical) and its LSO state. Returns
+# JSON-lines: one object per adapter with Name, IPv4Enabled, IPv6Enabled,
+# Virtual. We then check that any adapter carrying WSL traffic (the WSL
+# virtual one + every non-virtual one in `Up` state) has both flags = false.
+ADAPTERS_JSON=$(powershell.exe -NoProfile -Command '
+  $adapters = Get-NetAdapter | ForEach-Object {
+    $lso = Get-NetAdapterLso -Name $_.Name -ErrorAction SilentlyContinue
+    [PSCustomObject]@{
+      Name        = $_.Name
+      Status      = $_.Status
+      Virtual     = $_.Virtual
+      IPv4Enabled = if ($lso) { $lso.IPv4Enabled } else { $null }
+      IPv6Enabled = if ($lso) { $lso.IPv6Enabled } else { $null }
+    }
+  }
+  $adapters | ConvertTo-Json -Compress
+' 2>/dev/null | tr -d '\r' | head -c 8192)
 
-if [ -z "$LSO_JSON" ]; then
-  echo "wsl-lso-check: could not query NetAdapter LSO state — adapter naming may have changed." >&2
+if [ -z "$ADAPTERS_JSON" ]; then
+  echo "wsl-lso-check: could not query NetAdapter LSO state via PowerShell." >&2
   echo "wsl-lso-check: see docs/wsl2-setup.md for manual verification." >&2
   exit 0
 fi
 
-# Both IPv4 and IPv6 LSO must be disabled. Match the JSON regardless of
-# field ordering.
-case "$LSO_JSON" in
-  *'"IPv4Enabled":false'*'"IPv6Enabled":false'*|*'"IPv6Enabled":false'*'"IPv4Enabled":false'*)
+# Use Python for JSON parsing — it's part of the Chezmoi-managed package set
+# and avoids dragging in jq just for this check.
+PARSE_RESULT=$(python3 - "$ADAPTERS_JSON" <<'PY'
+import json, sys
+
+raw = sys.argv[1]
+data = json.loads(raw)
+# Single-adapter results are emitted as an object, not a list, by ConvertTo-Json
+if isinstance(data, dict):
+    data = [data]
+
+# An adapter is "carrying WSL traffic" if either:
+#   - it is the WSL vEthernet (Virtual=True, Name starts with "vEthernet (WSL")
+#   - it is physical (Virtual=False) and Up
+needs_check = []
+for a in data:
+    name = a.get("Name", "")
+    is_wsl_virtual = a.get("Virtual") is True and name.startswith("vEthernet (WSL")
+    is_active_physical = a.get("Virtual") is False and a.get("Status") == "Up"
+    if is_wsl_virtual or is_active_physical:
+        needs_check.append(a)
+
+bad = []
+checked = []
+for a in needs_check:
+    if a["IPv4Enabled"] is None and a["IPv6Enabled"] is None:
+        # Adapter doesn't expose LSO settings (some virtual ones don't);
+        # treat as N/A rather than as a failure.
+        continue
+    checked.append(a["Name"])
+    if a["IPv4Enabled"] or a["IPv6Enabled"]:
+        bad.append(a)
+
+print(f"checked={','.join(checked)}")
+if bad:
+    print("status=enabled-needs-manual-disable")
+    for a in bad:
+        print(f"bad={a['Name']}|ipv4={a['IPv4Enabled']}|ipv6={a['IPv6Enabled']}")
+else:
+    print("status=disabled")
+PY
+)
+
+# Extract status + checked + bad from the parser output.
+STATUS=$(echo "$PARSE_RESULT" | grep -E '^status=' | head -1 | cut -d= -f2-)
+CHECKED=$(echo "$PARSE_RESULT" | grep -E '^checked=' | head -1 | cut -d= -f2-)
+BAD_LINES=$(echo "$PARSE_RESULT" | grep -E '^bad=' | cut -d= -f2-)
+
+case "$STATUS" in
+  disabled)
     cat >"$SENTINEL" <<EOF
 status: disabled
 detected_at: $(date -Iseconds)
-adapter_pattern: vEthernet (WSL*)
-verified_via: powershell.exe Get-NetAdapterLso
+adapters_checked: $CHECKED
+verified_via: powershell.exe Get-NetAdapterLso (per-adapter)
 EOF
-    echo "wsl-lso-check: LSO is disabled on the WSL adapter — sentinel written to $SENTINEL"
+    echo "wsl-lso-check: LSO is disabled on all checked adapters ($CHECKED) — sentinel written to $SENTINEL"
     ;;
-  *)
-    cat >&2 <<'WARN'
+  enabled-needs-manual-disable)
+    cat >&2 <<WARN
 
 ================================================================================
-wsl-lso-check: WARNING — Large Send Offload is still ENABLED on the WSL adapter.
+wsl-lso-check: WARNING — Large Send Offload is still ENABLED on:
 
-This breaks long-running TCP sends from WSL — `git push`, `dolt push`,
-`bd dolt push`, `rsync`, `scp` will appear to hang with no network throughput.
+$BAD_LINES
 
-To fix, open an *Administrator* PowerShell on the Windows host and run:
+WSL traffic egresses through both the vEthernet (WSL *) adapter AND the
+physical NIC. LSO must be disabled on BOTH; a broken offload on either
+poisons long-running TCP sends. Symptoms: \`git push\` / \`dolt push\` /
+\`rsync\` / \`scp\` hang with no network throughput.
 
+Open an *Administrator* PowerShell on the Windows host and run:
+
+    # Identify the physical adapter(s) carrying outbound traffic
+    Get-NetAdapter | Where-Object Virtual -eq \$false |
+      Select Name, InterfaceDescription, Status
+
+    # Disable LSO on the WSL virtual adapter
     Disable-NetAdapterLso -Name "vEthernet (WSL*)" -IPv4 -IPv6
-    Get-NetAdapterLso -Name "vEthernet (WSL*)"   # confirm IPv4Enabled/IPv6Enabled = False
 
-The setting is registry-persistent across reboots. Full context:
+    # And on each physical adapter you use (substitute names from step above)
+    Disable-NetAdapterLso -Name "Ethernet" -IPv4 -IPv6
+    # Disable-NetAdapterLso -Name "Wi-Fi" -IPv4 -IPv6
+
+    # Confirm
+    Get-NetAdapterLso
+
+The settings are registry-persistent across reboots. Full context:
 docs/wsl2-setup.md.
 
 After fixing, force a re-check:
@@ -86,13 +165,21 @@ After fixing, force a re-check:
 
 ================================================================================
 WARN
-    cat >"$SENTINEL" <<EOF
-status: enabled-needs-manual-disable
-detected_at: $(date -Iseconds)
-adapter_pattern: vEthernet (WSL*)
-mitigation: Disable-NetAdapterLso -Name "vEthernet (WSL*)" -IPv4 -IPv6 (admin PS)
-EOF
+    {
+      echo "status: enabled-needs-manual-disable"
+      echo "detected_at: $(date -Iseconds)"
+      echo "adapters_checked: $CHECKED"
+      echo "adapters_with_lso_enabled:"
+      echo "$BAD_LINES" | sed 's/^/  - /'
+      echo "mitigation: |"
+      echo "  Disable-NetAdapterLso -Name \"vEthernet (WSL*)\" -IPv4 -IPv6"
+      echo "  Disable-NetAdapterLso -Name \"<physical adapter>\" -IPv4 -IPv6"
+    } >"$SENTINEL"
     # Exit 0 — don't break apply for unrelated work. The warning is loud
     # enough to be noticed; sentinel records the state for inspection.
+    ;;
+  *)
+    echo "wsl-lso-check: unexpected parser output:" >&2
+    echo "$PARSE_RESULT" >&2
     ;;
 esac
