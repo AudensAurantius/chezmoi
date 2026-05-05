@@ -22,6 +22,12 @@ Hygiene rules that persist:
 - Do not maintain a repo-root `MEMORY.md` as a state-tracking artifact — it fragments across accounts and duplicates what `bd remember` now handles
 - When a doc says "`memory/...`" with no leading path, it means **auto-memory** (`~/.claude/projects/<project>/memory/`). Do not create or look in a `memory/` directory at the project source root
 
+## Network ops in beads workflows
+
+- Do NOT run `bd dolt push` as part of session-end automation, cleanup, or checkpointing. The Dolt-side push is the user's responsibility to run interactively when convenient.
+- The JSONL state (the human-readable issues export) IS pushed via plain `git push` from the project's `.beads/` directory. That's small, fast, and adequate for cross-session visibility into bead state.
+- This convention exists because `bd dolt push` can stall on transient network issues (LSO bugs, PMTU blackholes, TCP metrics cache poisoning — see project pitfall docs); blocking session-end on it is unacceptable. The JSONL push is reliable; the Dolt push is best-effort.
+
 ## Implementation Approach
 
 - Implement features depth-first: complete and validate one unit before starting the next
