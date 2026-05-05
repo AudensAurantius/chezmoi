@@ -1,0 +1,26 @@
+# Pinned beads (bd) release, consumed by run_onchange_install-beads.sh.tmpl.
+#
+# bd (https://github.com/steveyegge/beads) is the issue tracker / Dolt-backed
+# database used as the source of truth for J121 task tracking and (eventually)
+# cross-project beads in shared-server mode.
+#
+# Asset naming matches the upstream releases convention:
+#   beads_<version>_<os>_<arch>.tar.gz   e.g. beads_1.0.3_linux_amd64.tar.gz
+# Tarball contains: CHANGELOG.md, LICENSE, README.md, bd (binary).
+#
+# SHA256s below are copied verbatim from the upstream checksums.txt for the
+# tagged release. Refresh them when bumping the version:
+#   curl -fsSL https://github.com/steveyegge/beads/releases/download/v<VER>/checksums.txt
+#
+# Why a Chezmoi-managed installer rather than the upstream curl|bash one?
+# The upstream scripts/install.sh always installs the latest release — fine
+# for first-time installs, useless for pinning. We pin the version in YAML so
+# `chezmoi apply` is reproducible and idempotent.
+
+beads:
+  version: "1.0.3"
+  checksums:
+    linux_amd64:  "1ef5dca818d7e81574df9e9f9fc2a16ab711da09b0fa7b822ae162d9a81c8912"
+    linux_arm64:  "243a9c75012e794888fcafb957e7624b8fefdfef033d14cd03ebc9831c3bc12f"
+    darwin_amd64: "6bd75ac056288a5e8bbb203750e95af5a441d5ad1d20ca5511e60cd6c813e54b"
+    darwin_arm64: "fe6e4465751f46d9f3a670c3cf656714a171e44c8bc318fe19054f513b8306ed"

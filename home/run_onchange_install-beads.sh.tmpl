@@ -1,0 +1,76 @@
+#!/bin/sh
+# run_onchange_install-beads.sh.tmpl — install bd (beads) to ~/.local/bin.
+#
+# Asset naming (from upstream releases):
+#   beads_<version>_<os>_<arch>.tar.gz   e.g. beads_1.0.3_linux_amd64.tar.gz
+# Tarball contains: CHANGELOG.md, LICENSE, README.md, bd
+#
+# Version + per-OS/arch tarball SHA256 pinned in .chezmoidata/beads.yaml.
+# Upstream publishes checksums.txt; the .chezmoidata values are verbatim copies.
+#
+# Why not use upstream `scripts/install.sh`? That script always pulls the
+# latest release and is unsuitable for pinning. Chezmoi-managed pinning is
+# the project convention (see .chezmoidata/beads.yaml header).
+{{- $v := .beads.version -}}
+{{- $platform := printf "%s_%s" .chezmoi.os .chezmoi.arch -}}
+{{- $assetName := printf "beads_%s_%s.tar.gz" $v $platform -}}
+{{- $sha := dig $platform "" .beads.checksums -}}
+{{- $assetURL := printf "https://github.com/steveyegge/beads/releases/download/v%s/%s" $v $assetName }}
+
+set -eu
+
+VERSION={{ $v | quote }}
+ASSET_NAME={{ $assetName | quote }}
+ASSET_URL={{ $assetURL | quote }}
+EXPECTED_SHA={{ $sha | quote }}
+INSTALL_PATH={{ joinPath .chezmoi.homeDir ".local" "bin" "bd" | quote }}
+
+if [ -z "$EXPECTED_SHA" ]; then
+  # No checksum pinned for this OS/arch in .chezmoidata/beads.yaml.
+  # Either upstream doesn't ship a binary for this platform, or the pin is
+  # incomplete. Skip with a note rather than fail apply.
+  echo "beads installer: no pinned checksum for $ASSET_NAME; skipping" >&2
+  exit 0
+fi
+
+# Idempotency guard — `bd --version` prints "bd version <ver> (<sha>)".
+if [ -x "$INSTALL_PATH" ] \
+    && "$INSTALL_PATH" --version 2>/dev/null | grep -qF "$VERSION"; then
+  echo "beads installer: $VERSION already installed at $INSTALL_PATH" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$INSTALL_PATH")"
+
+tmp_tar=$(mktemp)
+tmp_dir=$(mktemp -d)
+trap 'rm -rf "$tmp_tar" "$tmp_dir"' EXIT
+
+echo "beads installer: downloading $ASSET_URL" >&2
+curl -fsSL -o "$tmp_tar" "$ASSET_URL"
+
+actual=$(sha256sum "$tmp_tar" | awk '{print $1}')
+if [ "$EXPECTED_SHA" != "$actual" ]; then
+  echo "beads installer: checksum mismatch for $ASSET_NAME" >&2
+  echo "  expected: $EXPECTED_SHA" >&2
+  echo "  actual:   $actual" >&2
+  exit 1
+fi
+
+tar -xzf "$tmp_tar" -C "$tmp_dir"
+binary=$(find "$tmp_dir" -type f -name bd | head -1)
+if [ -z "$binary" ]; then
+  echo "beads installer: no 'bd' binary in $ASSET_NAME" >&2
+  exit 1
+fi
+
+chmod u+x "$binary"
+mv "$binary" "$INSTALL_PATH"
+echo "beads installer: $VERSION installed to $INSTALL_PATH" >&2
+
+# Optional symlink for the "beads" alias used in upstream documentation.
+# Skip if a real binary is already at that path.
+ALIAS_PATH={{ joinPath .chezmoi.homeDir ".local" "bin" "beads" | quote }}
+if [ ! -e "$ALIAS_PATH" ] || [ -L "$ALIAS_PATH" ]; then
+  ln -sf "$INSTALL_PATH" "$ALIAS_PATH"
+fi
