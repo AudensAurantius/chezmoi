@@ -46,6 +46,23 @@ Before saying "done", "fixed", "passing", "working", or any equivalent — in th
 - **Multi-item requirements need a checklist.** "Tests pass" ≠ "all requirements met". Re-read the plan, enumerate each item, verify each one. Report gaps explicitly.
 - **"Should work now", "I'm confident", and "just this once" are red flags.** They usually mean the command wasn't run. Run it.
 
+## Spawning independent agents
+
+Before invoking the Agent tool, follow the pre-flight procedure in the
+`spawn-agents` skill: predict the tools each agent will need, pre-load
+deferred-tool schemas, declare the expected tool set to the user for
+batch approval, and dispatch only after approval. If you cannot
+reasonably predict the agents' tool usage, surface that fact explicitly
+and wait for confirmation that the user accepts the friction of
+in-flight blocking prompts.
+
+Rationale: each spawned agent inherits the parent session's permission
+state and triggers blocking prompts to the user (not to the parent
+session) for tools that aren't allowlisted. Front-loading the decision
+consolidates N prompts into 1 and lets the user step away from the
+terminal during agent execution. See
+`~/.claude/skills/spawn-agents/SKILL.md` for the full procedure.
+
 ## Standing Instructions
 
 - Push back against any aspect of a prompt that seems misguided, vague, ill-informed, or overly ambitious — be direct, not diplomatic
