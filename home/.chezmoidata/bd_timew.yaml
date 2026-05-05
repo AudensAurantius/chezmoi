@@ -29,6 +29,6 @@
 #   3. chezmoi apply — script re-runs automatically due to changed rendered content
 
 bdTimew:
-  version: "0.1.0"
+  version: "0.2.0"
   repo_url: "git@github.com:AudensAurantius/bd-timew"
   clone_dir: ".local/src/bd-timew"
