@@ -57,3 +57,5 @@ dolt.auto-push: false
 dolt.auto-commit: "batch"
 
 backup.git-push: false
+
+sync.remote: "git+ssh://git@github.com/AudensAurantius/chezmoi.git"
