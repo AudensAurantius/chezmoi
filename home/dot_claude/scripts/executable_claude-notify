@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# claude-notify — manage per-session notification sentinels.
+#
+# Subcommands:
+#   enable [--force]   write the default sentinel for the current claude session
+#   disable            remove the sentinel for the current session
+#   status             show whether enabled, print sentinel content if so (default)
+#   help               show this help
+#
+# The sentinel lives at:
+#   ~/.local/state/claude/notifications/<session-id>.jq
+#
+# It contains a jq expression evaluated against the Notification hook
+# payload by ~/.claude/scripts/hooks/on-notification.sh, producing JSON
+# that's piped to `wsl-notify-send --config -`. Edit the sentinel directly
+# to customize.
+#
+# The companion hook + the cleanup-on-SessionEnd hook are configured in
+# ~/.claude/settings.json (managed by chezmoi via modify_settings.json).
+
+set -euo pipefail
+
+usage() {
+    sed -n '/^# claude-notify/,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
+
+state_dir="$HOME/.local/state/claude/notifications"
+
+# ── Session-ID resolution ────────────────────────────────────────────────────
+# Walk up the bash process tree from $$ until we find the parent claude
+# process, then read its session manifest at ~/.claude/sessions/<pid>.json
+# which Claude Code maintains as a per-PID record of its session id.
+# Robust against multiple parallel claude sessions in the same project
+# directory: each PID has its own manifest file.
+
+get_session_id() {
+    local pid=$$ comm sf
+    while [ "$pid" -gt 1 ]; do
+        comm=$(cat /proc/"$pid"/comm 2>/dev/null) || break
+        if [ "$comm" = "claude" ]; then
+            sf="$HOME/.claude/sessions/${pid}.json"
+            if [ -f "$sf" ]; then
+                jq -r '.sessionId // empty' "$sf"
+                return 0
+            fi
+        fi
+        pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+        [ -z "$pid" ] && break
+    done
+    echo "claude-notify: could not determine current session id" >&2
+    echo "  (no parent process named 'claude' with a session manifest at" >&2
+    echo "   ~/.claude/sessions/<pid>.json)" >&2
+    return 1
+}
+
+# ── Default sentinel content ─────────────────────────────────────────────────
+# A jq expression that evaluates against the Notification hook payload and
+# produces a wsl-notify-send config JSON. The user can edit the sentinel
+# directly to customize (e.g. change scenario, add buttons, adjust title).
+
+default_sentinel() {
+    cat <<'JQ'
+# Default notification config for this Claude session.
+# Evaluated as a jq expression against the Notification hook payload.
+# Output JSON is fed to `wsl-notify-send --config -`.
+#
+# Customize freely. Hook payload typically includes:
+#   .session_id, .transcript_path, .cwd, .hook_event_name, .message
+#
+# wsl-notify-send config keys (all optional except an implicit title):
+#   title, body, scenario, group, image, header, buttons
+# Scenarios: default | reminder | alarm | incomingCall
+
+{
+  title:    "Claude Code",
+  scenario: "reminder",
+  group:    "claude-" + .session_id,
+  body:     (.message // "needs attention")
+}
+JQ
+}
+
+# ── Subcommands ──────────────────────────────────────────────────────────────
+
+cmd_enable() {
+    local sid sentinel force=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --force) force=true; shift ;;
+            *) echo "claude-notify enable: unknown arg: $1" >&2; return 1 ;;
+        esac
+    done
+
+    sid=$(get_session_id) || exit 1
+    mkdir -p "$state_dir"
+    sentinel="$state_dir/${sid}.jq"
+
+    if [ -e "$sentinel" ] && [ "$force" = false ]; then
+        echo "claude-notify: sentinel already exists at $sentinel" >&2
+        echo "  use 'claude-notify enable --force' to overwrite, or edit directly" >&2
+        return 1
+    fi
+
+    default_sentinel >"$sentinel"
+    echo "✓ Notifications enabled for session $sid"
+    echo "  Sentinel: $sentinel"
+    echo "  Edit the file directly to customize the toast (jq expression)"
+}
+
+cmd_disable() {
+    local sid sentinel
+    sid=$(get_session_id) || exit 1
+    sentinel="$state_dir/${sid}.jq"
+    if [ -f "$sentinel" ]; then
+        rm "$sentinel"
+        echo "✓ Notifications disabled for session $sid"
+    else
+        echo "claude-notify: not enabled for session $sid (no sentinel found)"
+    fi
+}
+
+cmd_status() {
+    local sid sentinel
+    sid=$(get_session_id) || exit 1
+    sentinel="$state_dir/${sid}.jq"
+    echo "Session:  $sid"
+    echo "Sentinel: $sentinel"
+    if [ -f "$sentinel" ]; then
+        echo "Status:   ENABLED"
+        echo "─── Sentinel content ───"
+        cat "$sentinel"
+    else
+        echo "Status:   disabled (sentinel absent)"
+    fi
+}
+
+# ── Dispatch ─────────────────────────────────────────────────────────────────
+
+subcmd="${1:-status}"
+[ $# -gt 0 ] && shift
+case "$subcmd" in
+    enable)         cmd_enable "$@" ;;
+    disable)        cmd_disable ;;
+    status)         cmd_status ;;
+    help|-h|--help) usage ;;
+    *)              echo "claude-notify: unknown subcommand: $subcmd" >&2; usage; exit 1 ;;
+esac

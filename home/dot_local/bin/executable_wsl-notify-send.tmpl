@@ -7,14 +7,38 @@
 # for basic title+body toasts when BurntToast is absent.
 #
 # Usage: wsl-notify-send [flags] <title> [body]
+#        wsl-notify-send [flags] --config <file>
+#        wsl-notify-send [flags] --config -        # read JSON config from stdin
+#        wsl-notify-send --help
 #
 # Flags:
+#   -h, --help               show this help and exit
 #   --scenario <default|reminder|alarm|incomingCall>
 #   --group <id>             same id replaces rather than stacks toasts
 #   --image <windows-path>   image displayed in the toast
 #   --header <id=title>      conversation header grouping
 #   --button <label=action>  action button; action: dismiss | snooze | <url>
 #                            repeatable; multiple --button flags are cumulative
+#   --config <file>          read settings from a JSON file (or '-' for stdin)
+#
+# JSON config file shape (all keys optional; arrays for buttons):
+#   {
+#     "title":    "...",
+#     "body":     "...",
+#     "scenario": "reminder",
+#     "group":    "...",
+#     "image":    "/win/path",
+#     "header":   "id=title",
+#     "buttons":  ["label1", "label2=action2", ...]
+#   }
+#
+# Precedence (when --config is combined with CLI flags / positionals):
+#   - Scalars (title/body/scenario/group/image/header):
+#       CLI flag or positional wins; config provides defaults for fields
+#       the CLI didn't supply.
+#   - Buttons (array):
+#       Config's buttons come first, CLI --button flags are appended after.
+#       Order: [config buttons..., cli buttons...]
 #
 # Installation of wsl-notify-send.exe (fallback):
 #   See J121 memory feedback-time-tracking.md — exe lives at %USERPROFILE%\bin\
@@ -23,29 +47,87 @@ set -euo pipefail
 
 INSTALL_SUBPATH="bin/wsl-notify-send.exe"
 
-# ── Flag parsing ──────────────────────────────────────────────────────────────
+# Print the docstring above as the help text. ${BASH_SOURCE[0]} is preferred
+# over $0 here so this works correctly if the script is ever sourced rather
+# than executed (e.g. for testing).
+usage() {
+    sed -n '/^# Usage:/,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
 
-scenario="Default"
-group=""
-image=""
-header=""
+# ── Flag parsing ──────────────────────────────────────────────────────────────
+# Track which scalar flags were explicitly given so --config can adopt only
+# the unset ones rather than overwriting CLI intent.
+
+scenario="Default"; scenario_set=false
+group="";           group_set=false
+image="";           image_set=false
+header="";          header_set=false
 buttons=()
+config_file=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --scenario) scenario="$2"; shift 2 ;;
-        --group)    group="$2";    shift 2 ;;
-        --image)    image="$2";    shift 2 ;;
-        --header)   header="$2";   shift 2 ;;
+        -h|--help)  usage; exit 0 ;;
+        --scenario) scenario="$2"; scenario_set=true; shift 2 ;;
+        --group)    group="$2";    group_set=true;    shift 2 ;;
+        --image)    image="$2";    image_set=true;    shift 2 ;;
+        --header)   header="$2";   header_set=true;   shift 2 ;;
         --button)   buttons+=("$2"); shift 2 ;;
+        --config)   config_file="$2"; shift 2 ;;
         --)         shift; break ;;
         -*)         echo "wsl-notify-send: unknown flag: $1" >&2; exit 1 ;;
         *)          break ;;
     esac
 done
 
-title="${1:-notification}"
-body="${2:-}"
+title="";  title_set=false
+body="";   body_set=false
+[ $# -ge 1 ] && { title="$1"; title_set=true; }
+[ $# -ge 2 ] && { body="$2";  body_set=true;  }
+
+# ── --config handling ─────────────────────────────────────────────────────────
+# Scalars: CLI wins; config fills in unset fields.
+# Buttons: config's array first, CLI-collected --button flags appended after.
+#
+# Note on `${arr[@]+"${arr[@]}"}` array expansion below:
+#   The leading `+` is bash's "set-or-default" parameter expansion: if `arr`
+#   is set, expand to its elements; if unset, expand to nothing. It's a
+#   defensive idiom against a bash 4.0–4.3 bug where `"${arr[@]}"` on an
+#   empty array under `set -u` raised "unbound variable". Fixed in bash 4.4
+#   (Oct 2016), so it's redundant on modern systems — but cheap insurance
+#   and recognizable to anyone who's debugged scripts on RHEL 7-era boxes.
+
+if [ -n "$config_file" ]; then
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "wsl-notify-send: --config requires jq on PATH" >&2
+        exit 1
+    fi
+    if [ "$config_file" = "-" ]; then
+        cfg_json=$(cat)
+    elif [ -f "$config_file" ]; then
+        cfg_json=$(cat "$config_file")
+    else
+        echo "wsl-notify-send: config file not found: $config_file" >&2
+        exit 1
+    fi
+
+    _fld() { jq -r --arg k "$1" '.[$k] // empty' <<<"$cfg_json"; }
+
+    if [ "$title_set"    = false ]; then v=$(_fld title);    [ -n "$v" ] && title="$v";    fi
+    if [ "$body_set"     = false ]; then v=$(_fld body);     [ -n "$v" ] && body="$v";     fi
+    if [ "$scenario_set" = false ]; then v=$(_fld scenario); [ -n "$v" ] && scenario="$v"; fi
+    if [ "$group_set"    = false ]; then v=$(_fld group);    [ -n "$v" ] && group="$v";    fi
+    if [ "$image_set"    = false ]; then v=$(_fld image);    [ -n "$v" ] && image="$v";    fi
+    if [ "$header_set"   = false ]; then v=$(_fld header);   [ -n "$v" ] && header="$v";   fi
+
+    if [ "$(jq 'has("buttons") and (.buttons | type == "array") and (.buttons | length > 0)' <<<"$cfg_json")" = "true" ]; then
+        mapfile -t config_buttons < <(jq -r '.buttons[]' <<<"$cfg_json")
+        buttons=("${config_buttons[@]+"${config_buttons[@]}"}" "${buttons[@]+"${buttons[@]}"}")
+    fi
+fi
+
+# Final defaults if neither CLI nor config supplied a title.
+[ -z "$title" ] && title="notification"
 
 # ── Resolve Windows USERPROFILE ───────────────────────────────────────────────
 

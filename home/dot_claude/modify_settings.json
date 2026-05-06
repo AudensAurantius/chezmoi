@@ -21,11 +21,28 @@ fi
 input="$(cat)"
 [ -z "$input" ] && input='{}'
 
-cmd="timew | head -1 | grep -q '^Tracking' && echo '⚠ timew still tracking — bd-timew stop if done' || true"
+timew_cmd="timew | head -1 | grep -q '^Tracking' && echo '⚠ timew still tracking — bd-timew stop if done' || true"
+
+# Notification hook: sentinel-aware Windows-toast dispatch (per-session opt-in).
+notify_cmd="$HOME/.claude/scripts/hooks/on-notification.sh"
+
+# SessionEnd cleanup: remove the per-session notification sentinel if present.
+# Reads the hook event JSON on stdin to extract session_id; safe no-op if absent.
+cleanup_cmd='sid=$(jq -r '\''.session_id // empty'\''); [ -n "$sid" ] && rm -f "$HOME/.local/state/claude/notifications/$sid.jq" || true'
 
 printf '%s\n' "$input" | jq \
-  --arg cmd "$cmd" \
-  '.hooks = {"SessionEnd": [{"hooks": [{"type": "command", "command": $cmd}]}]} |
+  --arg timew_cmd   "$timew_cmd" \
+  --arg notify_cmd  "$notify_cmd" \
+  --arg cleanup_cmd "$cleanup_cmd" \
+  '.hooks = {
+     "SessionEnd": [
+       {"hooks": [{"type": "command", "command": $timew_cmd}]},
+       {"hooks": [{"type": "command", "command": $cleanup_cmd}]}
+     ],
+     "Notification": [
+       {"hooks": [{"type": "command", "command": $notify_cmd}]}
+     ]
+   } |
    .enabledPlugins = {"claude-mem@thedotmack": true} |
    .extraKnownMarketplaces = {"thedotmack": {"source": {"source": "github", "repo": "thedotmack/claude-mem"}}} |
    .permissions.allow = [
