@@ -1,0 +1,34 @@
+graph TD
+    classDef builtin fill:#e1f5ff,stroke:#0277bd,stroke-width:2px,color:#000
+    classDef j121role fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef external fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,stroke-dasharray:5 5,color:#000
+    classDef svcuser fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    classDef oneoff fill:#ffebee,stroke:#c62828,stroke-width:2px,stroke-dasharray:3 3,color:#000
+
+    AA["ACCOUNTADMIN<br/><i>manual one-off only</i>"]:::oneoff
+
+    SA[SECURITYADMIN]:::builtin
+    SY[SYSADMIN]:::builtin
+    UA[USERADMIN]:::builtin
+
+    TFS(["J121_TERRAFORM_SVC<br/><i>service user</i>"]):::svcuser
+    DS(["J121_DEPLOY_SVC<br/><i>service user</i>"]):::svcuser
+
+    DR[J121_DEPLOY_ROLE]:::j121role
+    PO[J121_PROCEDURE_OWNER]:::j121role
+    TO[J121_TABLE_OWNER]:::j121role
+
+    BD[BOCO_DEV_ROLE]:::external
+    BA["BOCO_ANALYTICS_ROLE<br/><i>owns ANALYTICS_SILVER</i><br/><i>not in J121 hierarchy;</i><br/><i>J121 grants to it (§6.4)</i>"]:::external
+
+    %% Service-user → role bindings (dashed)
+    TFS -.->|default| SA
+    TFS -.->|granted| SY
+    DS -.->|default| DR
+
+    %% Role-grant hierarchy (solid; parent → child inheritance)
+    UA --> DR
+    DR --> PO
+    DR --> TO
+    BD --> PO
+    BD --> TO
