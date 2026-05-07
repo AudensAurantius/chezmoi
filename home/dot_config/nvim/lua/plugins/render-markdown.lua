@@ -147,6 +147,20 @@ return {
         enabled = true,
         highlight = "RenderMarkdownSign",
       },
+      html = {
+        enabled = true,
+        comment = { conceal = true },
+      },
+      latex = {
+        enabled = true,
+        converter = { "utftex", "latex2text" },
+        highlight = "RenderMarkdownMath",
+      },
+      yaml = { enabled = true },
+      wiki = { enabled = true },
+      inline_highlight = { enabled = true },
+      footnote = { enabled = true },
+      completions = { lsp = { enabled = true } },
       indent = {
         enabled = false,
         per_level = 2,
